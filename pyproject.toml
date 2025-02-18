@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "py-eos"
+version = "0.1.0"
+description = "Wrapper for comminicating with ETC's Eos family over OSC"
+authors = ["Reid Sox-Harris <reid@soxharris.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+python-osc = "^1.9.3"
+
+[tool.poetry.group.dev]
+optional = true
+
+[tool.poetry.group.dev.dependencies]
+mypy = "^1.14.0"
+pylint = "^3.3.3"
+black = "^24.10.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
