@@ -11,7 +11,7 @@ from pythonosc.osc_tcp_server import MODE_1_1
 from pythonosc.tcp_client import SimpleTCPClient
 from pythonosc.udp_client import SimpleUDPClient
 
-from eos_types import (
+from eos.types import (
     Cue,
     CueProperties,
     EosState,
@@ -33,10 +33,6 @@ class EosTimeout(EosException):
 
 
 class Eos(ABC):
-    previousCue: Cue
-    currentCue: Cue
-    pendingCue: Cue
-
     def __init__(self):
         self.write(f"/eos/sc/Connected from {sys.argv[0]}")
 
@@ -105,29 +101,38 @@ class Eos(ABC):
     def send_command(self, commandline: str) -> None:
         self.write("/eos/newcmd", [commandline])
 
-    @classmethod
-    def _unhandledMessageHandler(addr: str, *args: List[any]) -> None:
+    def enter(self) -> None:
+        self.write("/eos/cmd", ["#"])
+
+    def _unhandledMessageHandler(self, addr: str, *args: List[any]) -> None:
         logger.debug(f"Unhandled message: {addr} {args}")
 
     def _updateUserHandler(self, addr: str, *args: List[Any]) -> None:
         self.user_id = int(args[0])
 
     def _updatePreviousCueHandler(self, addr: str, *args: List[Any]) -> None:
-        if "text" in addr:
+        logger.debug(f"prev cue: {addr} {args}")
+        if len(args) == 0 or args[0] == "":
+            self.previousCue = None
+        elif "text" in addr:
             self.previousCue = Cue.fromText(args[0])
         else:
             # Redundant info, skip it
             pass
 
     def _updateActiveCueHandler(self, addr: str, *args: List[Any]) -> None:
-        if "text" in addr:
+        if len(args) == 0 or args[0] == "":
+            self.activeCue = None
+        elif "text" in addr:
             self.activeCue = Cue.fromText(args[0])
         else:
             # Redundant info, skip it
             pass
 
     def _updatePendingCueHandler(self, addr: str, *args: List[Any]) -> None:
-        if "text" in addr:
+        if len(args) == 0 or args[0] == "":
+            self.pendingCue = None
+        elif "text" in addr:
             self.pendingCue = Cue.fromText(args[0])
         else:
             # Redundant info, skip it
@@ -152,7 +157,8 @@ class Eos(ABC):
         try:
             return CueProperties.from_list(cuelist, cue, cuepart, args)
         except IndexError:
-            raise EosException(f"Cue {cuelist}/{cue} does not exist!")
+            logger.error(args)
+            raise EosException(f"Cue {cuelist}/{cue} Part {cuepart} does not exist!")
 
     def _cueFXParser(self, addr: str, args: List[Any]):
         if len(args) <= 2:
@@ -178,7 +184,7 @@ class Eos(ABC):
     def get_target_count(self, target: str, **kwargs: List[str]) -> int:
         assert target in EosTargets
         if target == "cue":
-            query_str = f"get/cue/{kwargs.get("cuelist", 1)}/count"
+            query_str = f"get/cue/{kwargs.get('cuelist', 1)}/count"
         else:
             query_str = f"get/{target}/count"
 
@@ -293,13 +299,28 @@ class Eos(ABC):
         self.dispatcher.unmap(f"/eos/out/get/macro/{macro:g}*", filter)
         return MacroProperties.from_list(macro, macro_props, macro_text)
 
-    def record_blank_cue(self, cue: Cue) -> None:
+    def record_cue(self, cue: Cue) -> None:
         self.blind()
+        if cue.part != 0:
+            raise ValueError("cue must have part zero")
         try:
             self.get_cue(cue)
         except EosException:
             self.send_command(f"Cue {cue.cue_format()} # #")
+            time.sleep(0.05)
         # Otherwise, cue already exists!
+
+    def record_part(self, cue: Cue, part) -> Cue:
+        # TODO: how to do this not in blind too, or at least restore state?
+        self.blind()
+        cue.part = part
+        try:
+            self.get_cue(cue)
+        except EosException:
+            self.send_command(f"Cue {cue.cue_format()} # #")
+            time.sleep(0.05)
+
+        return cue
 
     def intensity_block_cue(self, cue: Cue) -> None:
         props = self.get_cue(cue)
@@ -319,19 +340,41 @@ class Eos(ABC):
             return
         self.send_command(f"Cue {cue.cue_format()} Assert #")
 
+    def mark_cue(self, cue: Cue) -> None:
+        props = self.get_cue(cue)
+        if "M" in props.markstr or "m" in props.markstr:
+            return
+        self.send_command(f"Cue {cue.cue_format()} Mark #")
+
+    def mark_high_cue(self, cue: Cue) -> None:
+        # TODO check if "Mark" is in softkeys to see if Automark on
+        props = self.get_cue(cue)
+        if "Mh" in props.markstr or "mh" in props.markstr:
+            return
+        self.send_command(f"Cue {cue.cue_format()} Mark High_Priority #")
+
+    def mark_low_cue(self, cue: Cue) -> None:
+        props = self.get_cue(cue)
+        if "Ml" in props.markstr or "ml" in props.markstr:
+            return
+        self.send_command(f"Cue {cue.cue_format()} Mark Low_Priority #")
+
+    def label_cue(self, cue: Cue, label: str) -> None:
+        props = self.get_cue(cue)
+        if props.label != label:
+            logging.info(f"Updating cue {cue.cue_format()} label from {props.label} to {label}")
+            self.send_command(f"Cue {cue.cue_format()} Label {label}")
+            self.enter()
+
     def set_time(self, cue: Cue, cuetime: float) -> None:
-        if cue.part != 0:
-            self.send_command(
-                f"Cue {cue.cue_format()} Part {cue.part} Time {cuetime} #"
-            )
-        else:
-            self.send_command(f"Cue {cue.cue_format()} Time {cuetime} #")
+        self.send_command(f"Cue {cue.cue_format()} Time {cuetime} #")
 
     def add_scene(self, cue: Cue, scene: str) -> None:
         props = self.get_cue(cue)
         if props.scene != "" and props.scene != scene:
             logging.warning(f"Renaming scene on {cue.cue_format()} ({props.scene})")
-        self.send_command(f"Cue {cue.cue_format()} Scene {scene} #")
+        self.send_command(f"Cue {cue.cue_format()} Scene {scene}")
+        self.enter()
 
     def record_group(self, group: GroupProperties, overwrite: bool = False) -> None:
         self.open_tab(EosTab.GROUPS)
@@ -410,8 +453,6 @@ class EosUDP(Eos):
 
 
 class EosTCP(Eos):
-    client = None
-
     def __init__(self, ip: str, port: int):
         self.ip_address = ip
         self.port = port

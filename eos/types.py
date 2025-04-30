@@ -3,6 +3,12 @@ from enum import IntEnum
 from typing import Any, Callable, List, Optional, Union
 
 
+# TODO: how to make changing the attributes in CueProperties actually affect the cue? 
+# Then we could get rid of setters entirely, which would be nice 
+# Make a custom @property tag that allows for a keycommand or something passed to it
+
+# Use namedtuple for immutable data, like Cue (?) or freeze the dataclass.
+
 @dataclass
 class ReceivedOSC:
     address: str
@@ -21,7 +27,10 @@ class Cue:
     # Spaces around the / are MANDATORY
     # The :g is needed to print 10, not 10.0
     def cue_format(self) -> str:
-        return f"{self.cuelist:g} / {self.cue:g}"
+        if self.part == 0:
+            return f"{self.cuelist:g} / {self.cue:g}"
+        else:
+            return f"{self.cuelist:g} / {self.cue:g} Part {self.part:g}"
 
     # TODO: hint return self in 3.11
     @classmethod
@@ -37,7 +46,7 @@ class Cue:
         if len(fields) == 2:
             return cls(cuelist, cue, fields[1])
         else:
-            return cls(cuelist, cue, fields[1], float(fields[2].strip("%")) / 100.0)
+            return cls(cuelist, cue, fields[1], float(fields[-1].strip("%")) / 100.0)
 
 
 @dataclass
