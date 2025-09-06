@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from abc import ABC
 from decimal import Decimal
 from enum import IntEnum
 from typing import Any, Callable, List, Optional, Union
@@ -59,16 +60,18 @@ class Cue:
 
 
 @dataclass
-class CueProperties:
-    cuelist: int
-    cue: Union[int, float]
-    part: int
-
-    # Order matches Eos output
-    cueindex: int
+class EosProperties(ABC):
+    number: Decimal
+    index: int
     uid: str
     label: str
 
+@dataclass
+class CueProperties(EosProperties):
+    cuelist: int
+    part: int
+
+    # Order matches Eos output
     uptime: float
     updelay: float
     downtime: float
@@ -108,12 +111,12 @@ class CueProperties:
     @classmethod
     def from_list(cls, cuelist: int, cue: int, part: int, msg: List[Any]):
         return cls(
-            cuelist,
             cue,
-            part,
             msg[0],
             msg[1],
             msg[2],
+            cuelist,
+            part,
             msg[3],
             msg[4],
             msg[5],
@@ -146,15 +149,12 @@ class CueProperties:
 
 
 @dataclass
-class GroupProperties:
-    number: float
-    uid: str
-    label: str
+class GroupProperties(EosProperties):
     channels: List[str]
 
     @classmethod
     def from_list(cls, grp, props: List, chans: List[str]):
-        return cls(grp, props[1], props[2], [str(x) for x in chans])
+        return cls(grp, props[0], props[1], props[2], [str(x) for x in chans])
 
     def chanCommand(self) -> str:
         command = ""
@@ -168,16 +168,27 @@ class GroupProperties:
 
 
 @dataclass
-class MacroProperties:
-    number: float
-    uid: Optional[str]
-    label: str
+class MacroProperties(EosProperties):
     mode: str
     command: List[str]
 
     @classmethod
     def from_list(cls, macro: float, props: List, command: List[str]):
-        return cls(macro, props[1], props[2], props[3], [str(x) for x in command])
+        return cls(macro, props[0], props[1], props[2], props[3], [str(x) for x in command])
+
+
+@dataclass
+class RefDataProperties(EosProperties):
+    absolute: bool
+    locked: bool
+
+    chans: Optional[str] = None
+    bytype: Optional[str] = None
+    fx: Optional[str] = None
+
+    @classmethod
+    def from_list(cls, number: Decimal, msg: List[Any]):
+        return cls(number, msg[0], msg[1], msg[2], msg[3], msg[4])
 
 
 @dataclass
@@ -203,25 +214,6 @@ class OSCFilter:
             return self.callback(data)
         else:
             return data
-
-
-@dataclass
-class RefDataProperties:
-    number: Decimal
-    index: int
-    uid: str
-    label: str
-
-    absolute: bool
-    locked: bool
-
-    chans: Optional[str] = None
-    bytype: Optional[str] = None
-    fx: Optional[str] = None
-
-    @classmethod
-    def from_list(cls, number: Decimal, msg: List[Any]):
-        return cls(number, msg[0], msg[1], msg[2], msg[3], msg[4])
 
 
 class EosRange:

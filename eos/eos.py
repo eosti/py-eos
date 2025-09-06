@@ -14,7 +14,7 @@ from pythonosc.udp_client import SimpleUDPClient
 from eos.cues import EosCues
 from eos.groups import EosGroups
 from eos.macros import EosMacros
-from eos.refdata import EosRefDataGenerator
+from eos.iterator import EosRefDataIterator, EosCueIterator
 from eos.system import EosSystem
 from eos.types import Cue, CueProperties, EosException
 
@@ -24,11 +24,12 @@ logger = logging.getLogger(__name__)
 # EosBase is a the parent of all mixins, so it is implicitly inherited
 class Eos(ABC, EosCues, EosSystem, EosGroups, EosMacros):
     def __init__(self):
-        self.preset = EosRefDataGenerator(self, "preset")
-        self.ip = EosRefDataGenerator(self, "ip")
-        self.bp = EosRefDataGenerator(self, "bp")
-        self.fp = EosRefDataGenerator(self, "fp")
-        self.cp = EosRefDataGenerator(self, "cp")
+        self.preset = EosRefDataIterator(self, "preset")
+        self.ip = EosRefDataIterator(self, "ip")
+        self.bp = EosRefDataIterator(self, "bp")
+        self.fp = EosRefDataIterator(self, "fp")
+        self.cp = EosRefDataIterator(self, "cp")
+        self.cue = EosCueIterator(self)
 
         self.write(f"/eos/sc/Connected from {sys.argv[0]}")
 
