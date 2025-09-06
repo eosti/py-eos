@@ -12,15 +12,11 @@ from pythonosc.tcp_client import SimpleTCPClient
 from pythonosc.udp_client import SimpleUDPClient
 
 from eos.cues import EosCues
-from eos.system import EosSystem
 from eos.groups import EosGroups
 from eos.macros import EosMacros
-
-from eos.types import (
-    Cue,
-    CueProperties,
-    EosException,
-)
+from eos.refdata import EosRefDataGenerator
+from eos.system import EosSystem
+from eos.types import Cue, CueProperties, EosException
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +24,12 @@ logger = logging.getLogger(__name__)
 # EosBase is a the parent of all mixins, so it is implicitly inherited
 class Eos(ABC, EosCues, EosSystem, EosGroups, EosMacros):
     def __init__(self):
+        self.preset = EosRefDataGenerator(self, "preset")
+        self.ip = EosRefDataGenerator(self, "ip")
+        self.bp = EosRefDataGenerator(self, "bp")
+        self.fp = EosRefDataGenerator(self, "fp")
+        self.cp = EosRefDataGenerator(self, "cp")
+
         self.write(f"/eos/sc/Connected from {sys.argv[0]}")
 
         self.dispatcher.set_default_handler(self._unhandledMessageHandler)
@@ -46,7 +48,7 @@ class EosUDP(Eos):
         self.dispatcher = Dispatcher()
 
         # self.server = BlockingOSCUDPServer((self.ip, self.tx_port), self.dispatcher)
-        self.client = client = SimpleUDPClient(self.ip, self.rx_port)
+        self.client = SimpleUDPClient(self.ip, self.rx_port)
 
         logger.info(
             f"Connected to {self.ip_address} (TX:{self.tx_port}, RX:{self.rx_port})"
@@ -56,6 +58,9 @@ class EosUDP(Eos):
         super().__init__()
 
     def write(self, path: str, args: Optional[List[str]] = None) -> None:
+        logger.debug(f"{path}")
+        if args is not None:
+            logger.warning("Seemingly don't support arguments for UDP??")
         self.client.send_message(path)
 
 
@@ -73,8 +78,10 @@ class EosTCP(Eos):
 
     def write(self, path: str, args: Optional[List[str]] = None) -> None:
         if args is None:
+            logger.debug(f"{path}")
             self.client.send_message(path)
         else:
+            logger.debug(f"{path} {args}")
             self.client.send_message(path, args)
 
     def read_next(self, timeout: int = 30):

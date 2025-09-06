@@ -8,10 +8,8 @@ logging.basicConfig(level="DEBUG")
 
 eos = EosSLIP("localhost", 3032)
 eos.ping("reid")
-this_cue = Cue(1, 2, 3)
-eos.live()
-eos.mark_cue(this_cue)
-eos.enter()
+for cp in eos.iter_cues():
+    print(cp)
 
 while(1):
     eos.handle_messages()

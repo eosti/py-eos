@@ -26,6 +26,11 @@ class EosCues(EosBase):
         query_str = f"get/cue/{cuelist}/index/{index}"
         return self._getCueQuery(query_str)
 
+    def iter_cues(self, cuelist: int = 1) -> iter:
+        num_cues = self.get_target_count("cue", cuelist=cuelist)
+        for i in range(num_cues):
+            yield self.get_cue_by_index(i)
+
     def _getCueQuery(self, query_str: str) -> CueProperties:
         cue_data_count = 0
         output_cue = None
@@ -45,12 +50,12 @@ class EosCues(EosBase):
                 # Assume this one comes in first
                 output_cue = self._cueInfoParser(addr, list(args))
 
-        filter = self.dispatcher.map(f"/eos/out/{query_str}*", handler)
+        filter = self.dispatcher.map("/eos/out/get/cue/*", handler)
         self.write(f"/eos/{query_str}")
         self.handle_messages()
         if cue_data_count != 4:
             raise EosException(f"Didn't receive all data for cue ({cue_data_count})")
-        self.dispatcher.unmap(f"/eos/out/{query_str}*", filter)
+        self.dispatcher.unmap("/eos/out/get/cue/*", filter)
         return output_cue
 
     def _updatePreviousCueHandler(self, addr: str, *args: List[Any]) -> None:

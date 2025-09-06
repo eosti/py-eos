@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from decimal import Decimal
 from enum import IntEnum
 from typing import Any, Callable, List, Optional, Union
 
@@ -60,7 +61,7 @@ class Cue:
 @dataclass
 class CueProperties:
     cuelist: int
-    cue: int
+    cue: Union[int, float]
     part: int
 
     # Order matches Eos output
@@ -202,6 +203,40 @@ class OSCFilter:
             return self.callback(data)
         else:
             return data
+
+
+@dataclass
+class RefDataProperties:
+    number: Decimal
+    index: int
+    uid: str
+    label: str
+
+    absolute: bool
+    locked: bool
+
+    chans: Optional[str] = None
+    bytype: Optional[str] = None
+    fx: Optional[str] = None
+
+    @classmethod
+    def from_list(cls, number: Decimal, msg: List[Any]):
+        return cls(number, msg[0], msg[1], msg[2], msg[3], msg[4])
+
+
+class EosRange:
+    def __init__(self, eos_str: Any):
+        self.eos_str = eos_str
+
+    def to_individual(self) -> List[Decimal]:
+        # not sure how this will handle cells/decimals
+        if isinstance(self.eos_str, int):
+            return [self.eos_str]
+        elif isinstance(self.eos_str, str):
+            start_num, end_num = self.eos_str.split("-")
+            return list(range(int(start_num), int(end_num)))
+        else:
+            raise NotImplementedError(f"Can't convert type {type(self.eos_str)}")
 
 
 EosTargets = (

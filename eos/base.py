@@ -50,6 +50,10 @@ class EosBase:
     def get_target_count(self, target: str, **kwargs: List[str]) -> int:
         assert target in EosTargets
         if target == "cue":
+            if "cuelist" not in kwargs:
+                logger.warning(
+                    "Cuelist not specified for target count; defaulting to 1"
+                )
             query_str = f"get/cue/{kwargs.get('cuelist', 1)}/count"
         else:
             query_str = f"get/{target}/count"
@@ -61,7 +65,7 @@ class EosBase:
             target_count = args[0]
 
         filter = self.dispatcher.map(f"/eos/out/{query_str}", handler)
-        self.write("/eos/{query_str}")
+        self.write(f"/eos/{query_str}")
         self.handle_messages()
 
         if target_count is None:
