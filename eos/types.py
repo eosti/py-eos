@@ -2,12 +2,20 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Any, Callable, List, Optional, Union
 
-
-# TODO: how to make changing the attributes in CueProperties actually affect the cue? 
-# Then we could get rid of setters entirely, which would be nice 
+# TODO: how to make changing the attributes in CueProperties actually affect the cue?
+# Then we could get rid of setters entirely, which would be nice
 # Make a custom @property tag that allows for a keycommand or something passed to it
 
 # Use namedtuple for immutable data, like Cue (?) or freeze the dataclass.
+
+
+class EosException(Exception):
+    pass
+
+
+class EosTimeout(EosException):
+    pass
+
 
 @dataclass
 class ReceivedOSC:
