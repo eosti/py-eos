@@ -1,9 +1,10 @@
-from dataclasses import dataclass
 from abc import ABC
+from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import IntEnum
 from typing import Any, Callable, List, Optional, Union
 
+import itertools
 # TODO: how to make changing the attributes in CueProperties actually affect the cue?
 # Then we could get rid of setters entirely, which would be nice
 # Make a custom @property tag that allows for a keycommand or something passed to it
@@ -24,6 +25,101 @@ class ReceivedOSC:
     address: str
     typetags: str
     data: List[Any]
+
+
+class EosChanSelection:
+    """Stores ranges as individual channels"""
+
+    def __init__(self, chans: Union[List[Decimal], set[Decimal]]):
+        self.chans: set[Decimal] = set(chans)
+
+    def __repr__(self):
+        return str(self.chans)
+
+    def __iter__(self):
+        for i in self.chans:
+            yield i
+
+    def __eq__(self, other):
+        if isinstance(other, EosChanSelection):
+            return self.chans == other.chans
+        return False
+
+    @classmethod
+    def from_eos_arg(cls, eos_arg: List[Any]):
+        chan_list = []
+        for i in eos_arg:
+            if isinstance(i, (Decimal, int, float)):
+                chan_list += [Decimal(i)]
+            elif isinstance(i, str):
+                start_num, end_num = i.split("-")
+                if start_num.isdecimal() and end_num.isdecimal():
+                    chan_list += [Decimal(i) for i in list(range(int(start_num), int(end_num) + 1))]
+                else:
+                    raise NotImplementedError("Point channels not supported yet")
+            else:
+                raise NotImplementedError(f"Can't convert type {type(i)}")
+
+        return cls(sorted(chan_list))
+
+    @classmethod
+    def from_active_chans(cls, active_chans: str):
+        split_str = active_chans.split(",")
+        chan_list = []
+        for i in split_str:
+            chan_list.append(Decimal(i))
+        return cls(sorted(chan_list))
+
+    def to_ranges(self) -> list[tuple[Decimal, Decimal]]:
+        sorted_chans = sorted(set(self.chans))
+
+        def ranges(i):
+            for key, group in itertools.groupby(enumerate(i), lambda t: t[1] - t[0]):
+                group = list(group)
+                yield group[0][1], group[-1][1]
+
+        return list(ranges(sorted_chans))
+
+    def eos_command(self) -> str:
+        """Returns an Eos cmd string that contains all channels in range"""
+        command = ""
+        for idx, val in enumerate(self.to_ranges()):
+            if val[0] == val[1]:
+                # Single value
+                chanstr = str(val[0])
+            else:
+                # Range
+                chanstr = f"{val[0]} Thru {val[1]}"
+
+            if idx < len(self.chans) - 1:
+                # Not the last channel
+                chanstr += " +"
+
+            command += " " + chanstr
+
+        return command
+
+
+@dataclass
+class EosActiveChannel:
+    """Stores information about the active channel"""
+    chan: EosChanSelection
+    intens: int
+    fixture_type: str
+    fixture_version: int
+
+    @classmethod
+    def from_args(cls, args: List[Any]):
+        if args[0] == "":
+            return None
+        chan = EosChanSelection.from_active_chans(args[0].split("[")[0])
+        intens = int(args[0].split("[")[1].split("]")[0])
+
+        fixture = args[0].split("]")[1]
+        fixture_type = fixture.split("@")[0].strip()
+        fixture_version = int(fixture.split("@")[1])
+
+        return cls(chan, intens, fixture_type, fixture_version)
 
 
 @dataclass
@@ -50,8 +146,8 @@ class Cue:
     @classmethod
     def fromText(cls, text: str):
         fields = text.split(" ")
-        cuelist = fields[0].split("/")[0]
-        cue = fields[0].split("/")[1]
+        cuelist = int(fields[0].split("/")[0])
+        cue = Decimal(fields[0].split("/")[1])
 
         if len(fields) == 2:
             return cls(cuelist, cue, fields[1])
@@ -62,9 +158,18 @@ class Cue:
 @dataclass
 class EosProperties(ABC):
     number: Decimal
-    index: int
+    # Ignore this field in equality since Eos sometimes doesn't give this value
+    index: Optional[int] = field(compare=False)
     uid: str
     label: str
+
+    def __post_init__(self):
+        if self.index == -1:
+            # Eos may "optimize" out the index number to -1 unless you query by index
+            self.index = None
+        if not isinstance(self.number, Decimal):
+            self.number = Decimal(self.number)
+
 
 @dataclass
 class CueProperties(EosProperties):
@@ -109,7 +214,7 @@ class CueProperties(EosProperties):
     links2: Optional[str] = None
 
     @classmethod
-    def from_list(cls, cuelist: int, cue: int, part: int, msg: List[Any]):
+    def from_list(cls, cuelist: int, cue: Decimal, part: int, msg: List[Any]):
         return cls(
             cue,
             msg[0],
@@ -150,21 +255,11 @@ class CueProperties(EosProperties):
 
 @dataclass
 class GroupProperties(EosProperties):
-    chans: Optional[List[Decimal]] = None
+    chans: Optional[EosChanSelection] = None
 
     @classmethod
-    def from_list(cls, grp, props: List):
+    def from_list(cls, grp: Decimal, props: List):
         return cls(grp, props[0], props[1], props[2])
-
-    def chanCommand(self) -> str:
-        command = ""
-        for idx, val in enumerate(self.channels):
-            expandchan = val.replace("-", " Thru ")
-            if idx < len(self.channels) - 1:
-                expandchan += " + "
-            command += " " + expandchan
-
-        return command + " #"
 
 
 @dataclass
@@ -173,7 +268,7 @@ class MacroProperties(EosProperties):
     command: Optional[List[str]] = None
 
     @classmethod
-    def from_list(cls, macro: float, props: List):
+    def from_list(cls, macro: Decimal, props: List):
         return cls(macro, props[0], props[1], props[2], props[3])
 
 
@@ -182,8 +277,8 @@ class RefDataProperties(EosProperties):
     absolute: bool
     locked: bool
 
-    chans: Optional[str] = None
-    bytype: Optional[str] = None
+    chans: Optional[EosChanSelection] = None
+    bytype: Optional[EosChanSelection] = None
     fx: Optional[str] = None
 
     @classmethod
@@ -203,42 +298,6 @@ class OSCFilter:
             return data
 
 
-class EosRange:
-    def __init__(self, eos_str: Any):
-        self.eos_str = eos_str
-
-    def to_individual(self) -> List[Decimal]:
-        # not sure how this will handle cells/decimals
-        if isinstance(self.eos_str, int):
-            return [self.eos_str]
-        elif isinstance(self.eos_str, str):
-            start_num, end_num = self.eos_str.split("-")
-            return list(range(int(start_num), int(end_num)))
-        else:
-            raise NotImplementedError(f"Can't convert type {type(self.eos_str)}")
-
-
-@dataclass
-class EosChannel:
-    chan: Decimal
-    intens: int
-    fixture_type: str
-    fixture_version: int
-
-    @classmethod
-    def from_args(cls, args: List[Any]):
-        if args[0] == '':
-            return None
-        chan = Decimal(args[0].split("[")[0])
-        intens = int(args[0].split("[")[1].split("]")[0])
-
-        fixture = args[0].split("]")[1]
-        fixture_type = fixture.split("@")[0].strip()
-        fixture_version = int(fixture.split("@")[1])
-
-        return cls(chan, intens, fixture_type, fixture_version)
-
-
 class EosState(IntEnum):
     BLIND = 0
     LIVE = 1
@@ -254,7 +313,7 @@ class EosWheelCategory(IntEnum):
     SHUTTER = 6
 
 
-@dataclass 
+@dataclass
 class EosWheel:
     number: int
     name: str
@@ -267,7 +326,9 @@ class EosWheel:
         name = args[0].split("[")[0].strip()
         pretty_value = int(args[0].split("[")[1].replace("]", ""))
 
-        return cls(num, name, pretty_value, Decimal(args[2]), EosWheelCategory(int(args[1])))
+        return cls(
+            num, name, pretty_value, Decimal(args[2]), EosWheelCategory(int(args[1]))
+        )
 
 
 """
@@ -292,7 +353,6 @@ EosTargets = {
     "pixmap": 0,
     "ms": 0,
 }
-
 
 
 class EosTab(IntEnum):

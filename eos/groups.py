@@ -1,35 +1,56 @@
+"""Group-related functionality"""
 import logging
 import time
-from typing import Any, List
+from abc import ABC
+from typing import Optional, Union
+from decimal import Decimal
 
 from eos.base import EosBase
-from eos.types import EosException, EosTab, GroupProperties
+from eos.helpers import EosException, EosTab, EosChanSelection
+from eos.iterator import EosGroupIterator
 
 logger = logging.getLogger(__name__)
 
 
-class EosGroups(EosBase):
-    def record_group(self, group: GroupProperties, overwrite: bool = False) -> None:
+class EosGroups(ABC, EosBase):
+    """Mixin for group-related actions"""
+
+    def __init__(self):
+        self.group = EosGroupIterator(self)
+        super().__init__()
+
+    def record_group(self, group_num: Decimal, chans: Union[list, EosChanSelection], label: Optional[str] = None, overwrite: bool = False) -> None:
+        """Record a group"""
         self.open_tab(EosTab.GROUPS)
+        if isinstance(chans, list):
+            chans = EosChanSelection(chans)
+
         try:
-            grp = self.get_group(group.number)
+            grp = self.group.get(group_num)
         except EosException:
-            logging.info(f"Creating new group {group.number}")
-            self.send_command(f"Group {group.number} #")
-            self.send_command(f"Group {group.number} Label {group.label} #")
-            self.send_command(group.chanCommand())
+            logging.info("Creating new group %g", group_num)
+            self.send_command(f"Group {group_num} #")
+            if label is not None:
+                self.send_command(f"Group {group_num} Label {label} #")
+            self.send_command(chans.eos_command() + " #")
         else:
             if overwrite:
-                if grp.label != group.label:
+                if grp.label != label:
                     logging.info(
-                        f"Updating group {group.number} label to {group.label}"
-                    )
-                    self.send_command(f"Group {group.number} Label {group.label} #")
-                if grp.channels != group.channels:
+                        "Updating group %f label to %s", group_num, label)
+                    self.send_command(f"Group {group_num} Label {label} #")
+                if grp.chans != chans:
                     logging.info(
-                        f"Updating group {group.number} channels to {group.channels} (was {grp.channels})"
+                        "Updating group %f channels to %s (was %s)", group_num, chans, grp.chans
                     )
-                    self.send_command(f"Group {group.number} #")
-                    self.send_command(group.chanCommand() + "#")
+                    self.send_command(f"Group {group_num} #")
+                    self.send_command(chans.eos_command() + " # #")
             else:
                 raise EosException("Existing group differs from desired group!")
+
+    def delete_group(self, group_num: Decimal):
+        self.send_command(f"Delete Group {group_num} # #")
+        time.sleep(0.01)
+        self.handle_messages()
+        if self.cmd_line_error:
+            raise EosException(f"Group {group_num} does not exist")

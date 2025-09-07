@@ -1,11 +1,9 @@
 import logging
 import sys
-import time
-from abc import ABC, abstractmethod
-from typing import Any, List, Optional
+from abc import ABC
+from typing import List, Optional, Any
 
 from pythonosc.dispatcher import Dispatcher
-from pythonosc.osc_message_builder import ArgValue, build_msg
 from pythonosc.osc_packet import OscPacket
 from pythonosc.osc_tcp_server import MODE_1_1
 from pythonosc.tcp_client import SimpleTCPClient
@@ -13,16 +11,17 @@ from pythonosc.udp_client import SimpleUDPClient
 
 from eos.cues import EosCues
 from eos.groups import EosGroups
+from eos.iterator import (
+    EosRefDataIterator,
+)
 from eos.macros import EosMacros
-from eos.iterator import EosRefDataIterator, EosCueIterator, EosGroupIterator, EosMacroIterator
 from eos.system import EosSystem
-from eos.types import Cue, CueProperties, EosException
 
 logger = logging.getLogger(__name__)
 
 
 # EosBase is a the parent of all mixins, so it is implicitly inherited
-class Eos(ABC, EosCues, EosSystem, EosGroups, EosMacros):
+class Eos(EosCues, EosSystem, EosGroups, EosMacros):
     def __init__(self):
         super().__init__()
         self.preset = EosRefDataIterator(self, "preset")
@@ -30,9 +29,6 @@ class Eos(ABC, EosCues, EosSystem, EosGroups, EosMacros):
         self.bp = EosRefDataIterator(self, "bp")
         self.fp = EosRefDataIterator(self, "fp")
         self.cp = EosRefDataIterator(self, "cp")
-        self.cue = EosCueIterator(self)
-        self.group = EosGroupIterator(self)
-        self.macro = EosMacroIterator(self)
 
         self.write(f"/eos/sc/Connected from {sys.argv[0]}")
 
@@ -40,7 +36,7 @@ class Eos(ABC, EosCues, EosSystem, EosGroups, EosMacros):
 
         logger.info("Connected to Eos v%s", self.get_version())
 
-    def _unhandledMessageHandler(self, addr: str, *args: List[any]) -> None:
+    def _unhandledMessageHandler(self, addr: str, *args: List[Any]) -> None:
         logger.debug(f"Unhandled message: {addr} {args}")
 
 

@@ -1,20 +1,33 @@
 import logging
 import time
-from typing import Any, List, Optional
 from decimal import Decimal
+from typing import Any, List, Optional
+from abc import ABC
 
 from eos.base import EosBase
-from eos.types import EosException, EosWheel, EosChannel, EosState
+from eos.helpers import EosActiveChannel, EosException, EosState, EosWheel
 
 logger = logging.getLogger(__name__)
 
 
-class EosSystem(EosBase):
+class EosSystem(ABC, EosBase):
     def __init__(self):
         self.wheels: dict[int, EosWheel] = {}
         self.switch: dict[int, EosWheel] = {}
         self.softkeys: List[Optional[str]] = [None] * 12
         self.user_cmd_line: dict[int, tuple[str, str, bool]] = {}
+
+        self.hs: tuple(float, float)
+        self.pantilt: tuple(float, float)
+        self.xyz: tuple(float, float, float)
+        self.user_id: int
+        self.show_name: str
+        self.eos_state: EosState
+        self.display_mode: str
+        self.is_locked: bool
+        self.active_chan: EosActiveChannel
+        self.cmd_line: str
+        self.cmd_line_error: bool
 
         self.dispatcher.map("/eos/out/user", self._updateUserHandler)
         self.dispatcher.map("/eos/out/show/name", self._updateShowNameHandler)
@@ -46,12 +59,12 @@ class EosSystem(EosBase):
             ping_flag = True
 
         self.write("/eos/ping", message)
-        filter = self.dispatcher.map("/eos/out/ping", handler)
+        osc_filter = self.dispatcher.map("/eos/out/ping", handler)
         self.handle_messages()
         if ping_flag is False:
             raise EosException("No ping response received")
 
-        self.dispatcher.unmap("/eos/out/ping", filter)
+        self.dispatcher.unmap("/eos/out/ping", osc_filter)
 
     def get_version(self) -> str:
         version = None
@@ -62,12 +75,12 @@ class EosSystem(EosBase):
             version = args[0]
 
         self.write("/eos/get/version")
-        filter = self.dispatcher.map("/eos/out/get/version", handler)
+        osc_filter = self.dispatcher.map("/eos/out/get/version", handler)
         self.handle_messages()
         if version is None:
             raise EosException("Did not receive version data")
 
-        self.dispatcher.unmap("/eos/out/get/version", filter)
+        self.dispatcher.unmap("/eos/out/get/version", osc_filter)
         return version
 
     def _updateUserHandler(self, addr: str, *args: List[Any]) -> None:
@@ -95,10 +108,16 @@ class EosSystem(EosBase):
             self.softkeys[sk_num - 1] = args[0]
 
     def _updateActiveChanHandler(self, addr: str, *args: List[Any]) -> None:
-        self.active_chan = EosChannel.from_args(args)
+        self.active_chan = EosActiveChannel.from_args(args)
 
         if self.active_chan is not None:
-            logging.debug("Active Chan: %s @ %s (%s v%d)", self.active_chan.chan, self.active_chan.intens, self.active_chan.fixture_type, self.active_chan.fixture_version)
+            logging.debug(
+                "Active Chan: %s @ %s (%s v%d)",
+                self.active_chan.chan,
+                self.active_chan.intens,
+                self.active_chan.fixture_type,
+                self.active_chan.fixture_version,
+            )
 
         # When active chan is updated, wheels will reset
         self.wheels.clear()
@@ -111,19 +130,19 @@ class EosSystem(EosBase):
         if args[0] != 0:
             logger.warning("Non-zero empty wheel value... Something is afoot!")
             logger.warning("%s %s", addr, args[0])
-        else: 
+        else:
             self.wheels.clear()
 
     def _resetSwitchHandler(self, addr: str, *args: List[Any]) -> None:
         if args[0] != 0:
             logger.warning("Non-zero empty switch value... Something is afoot!")
             logger.warning("%s %s", addr, args[0])
-        else: 
+        else:
             # Switches not implemented yet
             pass
 
     def _updateCmdHandler(self, addr: str, *args: List[Any]) -> None:
-        combined_cmd = ''.join(args[:-1])
+        combined_cmd = "".join(args[:-1])
         self.display_mode = combined_cmd.split(":")[0]
         self.cmd_line = combined_cmd.split(":", 2)[2]
         self.cmd_line_error = bool(args[-1])
@@ -134,12 +153,19 @@ class EosSystem(EosBase):
             logging.debug("%s: %s", self.display_mode, self.cmd_line)
 
     def _updateUserCmdHandler(self, addr: str, *args: List[Any]) -> None:
-        combined_cmd = ''.join(args[:-1])
+        combined_cmd = "".join(args[:-1])
         user_number = int(addr.split("/")[-2])
         display_mode = combined_cmd.split(":")[0].strip()
         cmd_line = combined_cmd.split(":", 2)[2].strip()
-        self.user_cmd_line.update({user_number: (display_mode, cmd_line, bool(args[-1]))})
-        logging.debug("User %i: %s: %s", user_number, self.user_cmd_line[user_number][0], self.user_cmd_line[user_number][1])
+        self.user_cmd_line.update(
+            {user_number: (display_mode, cmd_line, bool(args[-1]))}
+        )
+        logging.debug(
+            "User %i: %s: %s",
+            user_number,
+            self.user_cmd_line[user_number][0],
+            self.user_cmd_line[user_number][1],
+        )
 
     def _updateHSColorHandler(self, addr: str, *args: List[Any]) -> None:
         if len(args) == 0:
@@ -158,6 +184,6 @@ class EosSystem(EosBase):
     def _updateXYZHandler(self, addr: str, *args: List[Any]) -> None:
         if len(args) == 0:
             self.xyz = None
-        else: 
+        else:
             self.xyz = (Decimal(args[0]), Decimal(args[1]), Decimal(args[2]))
             logger.debug("X/Y/Z: %f, %f, %f", self.xyz[0], self.xyz[1], self.xyz[2])
