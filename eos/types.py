@@ -29,7 +29,7 @@ class ReceivedOSC:
 @dataclass
 class Cue:
     cuelist: int
-    cue: Union[float, int]
+    cue: Decimal
     part: int = 0
     duration: Optional[int] = None
     percentage: Optional[float] = None
@@ -192,19 +192,6 @@ class RefDataProperties(EosProperties):
 
 
 @dataclass
-class EosState:
-    user: int
-    previous_cue: Cue
-    active_cue: Cue
-    softkeys: List[str]
-    showname: str
-
-    @classmethod
-    def empty_state(cls):
-        return cls(0, Cue.empty_cue(), Cue.empty_cue(), [""], "")
-
-
-@dataclass
 class OSCFilter:
     filter_str: str
     callback: Optional[Callable[[ReceivedOSC], Any]] = None
@@ -231,6 +218,58 @@ class EosRange:
             raise NotImplementedError(f"Can't convert type {type(self.eos_str)}")
 
 
+@dataclass
+class EosChannel:
+    chan: Decimal
+    intens: int
+    fixture_type: str
+    fixture_version: int
+
+    @classmethod
+    def from_args(cls, args: List[Any]):
+        if args[0] == '':
+            return None
+        chan = Decimal(args[0].split("[")[0])
+        intens = int(args[0].split("[")[1].split("]")[0])
+
+        fixture = args[0].split("]")[1]
+        fixture_type = fixture.split("@")[0].strip()
+        fixture_version = int(fixture.split("@")[1])
+
+        return cls(chan, intens, fixture_type, fixture_version)
+
+
+class EosState(IntEnum):
+    BLIND = 0
+    LIVE = 1
+
+
+class EosWheelCategory(IntEnum):
+    UNASSIGNED = 0
+    INTENSITY = 1
+    FOCUS = 2
+    COLOR = 3
+    IMAGE = 4
+    FORM = 5
+    SHUTTER = 6
+
+
+@dataclass 
+class EosWheel:
+    number: int
+    name: str
+    pretty_value: int
+    value: Decimal
+    category: EosWheelCategory
+
+    @classmethod
+    def from_args(cls, num: int, args: List[Any]):
+        name = args[0].split("[")[0].strip()
+        pretty_value = int(args[0].split("[")[1].replace("]", ""))
+
+        return cls(num, name, pretty_value, Decimal(args[2]), EosWheelCategory(int(args[1])))
+
+
 """
 Valid iterator targets.
 Dict value represents # of OSC messages to get full data
@@ -253,6 +292,7 @@ EosTargets = {
     "pixmap": 0,
     "ms": 0,
 }
+
 
 
 class EosTab(IntEnum):
