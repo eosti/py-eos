@@ -13,9 +13,9 @@ class EosCues(EosBase):
         self.dispatcher.map("/eos/out/previous/cue*", self._updatePreviousCueHandler)
         self.dispatcher.map("/eos/out/active/cue*", self._updateActiveCueHandler)
         self.dispatcher.map("/eos/out/pending/cue*", self._updatePendingCueHandler)
+        super().__init__()
 
     def _updatePreviousCueHandler(self, addr: str, *args: List[Any]) -> None:
-        logger.debug(f"prev cue: {addr} {args}")
         if len(args) == 0 or args[0] == "":
             self.previousCue = None
         elif "text" in addr:

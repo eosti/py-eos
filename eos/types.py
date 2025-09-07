@@ -150,11 +150,11 @@ class CueProperties(EosProperties):
 
 @dataclass
 class GroupProperties(EosProperties):
-    channels: List[str]
+    chans: Optional[List[Decimal]] = None
 
     @classmethod
-    def from_list(cls, grp, props: List, chans: List[str]):
-        return cls(grp, props[0], props[1], props[2], [str(x) for x in chans])
+    def from_list(cls, grp, props: List):
+        return cls(grp, props[0], props[1], props[2])
 
     def chanCommand(self) -> str:
         command = ""
@@ -170,11 +170,11 @@ class GroupProperties(EosProperties):
 @dataclass
 class MacroProperties(EosProperties):
     mode: str
-    command: List[str]
+    command: Optional[List[str]] = None
 
     @classmethod
-    def from_list(cls, macro: float, props: List, command: List[str]):
-        return cls(macro, props[0], props[1], props[2], props[3], [str(x) for x in command])
+    def from_list(cls, macro: float, props: List):
+        return cls(macro, props[0], props[1], props[2], props[3])
 
 
 @dataclass
@@ -231,24 +231,28 @@ class EosRange:
             raise NotImplementedError(f"Can't convert type {type(self.eos_str)}")
 
 
-EosTargets = (
-    "patch",
-    "cuelist",
-    "cue",
-    "group",
-    "macro",
-    "sub",
-    "preset",
-    "ip",
-    "fp",
-    "cp",
-    "bp",
-    "curve",
-    "fx",
-    "snap",
-    "pixmap",
-    "ms",
-)
+"""
+Valid iterator targets.
+Dict value represents # of OSC messages to get full data
+"""
+EosTargets = {
+    "patch": 0,
+    "cuelist": 0,
+    "cue": 4,
+    "group": 2,
+    "macro": 2,
+    "sub": 0,
+    "preset": 4,
+    "ip": 3,
+    "fp": 3,
+    "cp": 3,
+    "bp": 3,
+    "curve": 0,
+    "fx": 0,
+    "snap": 0,
+    "pixmap": 0,
+    "ms": 0,
+}
 
 
 class EosTab(IntEnum):

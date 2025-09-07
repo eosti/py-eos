@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Any, List
+from typing import Any, List, Optional
 
 from eos.base import EosBase
 from eos.types import EosException
@@ -13,8 +13,13 @@ class EosSystem(EosBase):
         self.dispatcher.map("/eos/out/user", self._updateUserHandler)
         self.dispatcher.map("/eos/out/show/name", self._updateShowNameHandler)
         self.dispatcher.map("/eos/out/state", self._updateStateHandler)
+        self.dispatcher.map("/eos/out/event/state", self._updateStateHandler)
         self.dispatcher.map("/eos/out/locked", self._updateLockedHandler)
+        self.dispatcher.map("/eos/out/event/locked", self._updateLockedHandler)
         # self.dispatcher.map("/eos/out/cmd", self._updateCmdHandler)
+        self.dispatcher.map("/eos/out/softkey/*", self._updateSoftKeyHandler)
+        self.softkeys: List[Optional[str]] = [None] * 12
+        super().__init__()
 
     def ping(self, message: str = ""):
         ping_flag = False
@@ -39,6 +44,7 @@ class EosSystem(EosBase):
         version = None
 
         def handler(addr: str, *args: List[any]) -> None:
+            # Ignores fixture library version
             nonlocal version
             version = args[0]
 
@@ -62,6 +68,14 @@ class EosSystem(EosBase):
 
     def _updateLockedHandler(self, addr: str, *args: List[Any]) -> None:
         self.is_locked = bool(args[0])
+
+    def _updateSoftKeyHandler(self, addr: str, *args: List[Any]) -> None:
+        sk_num = int(addr.rsplit("/", 1)[1])
+        # zero-index the python array
+        if args[0] == "":
+            self.softkeys[sk_num - 1] = None
+        else:
+            self.softkeys[sk_num - 1] = args[0]
 
     def _updateCmdHandler(self, addr: str, *args: List[Any]) -> None:
         pass

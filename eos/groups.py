@@ -9,34 +9,6 @@ logger = logging.getLogger(__name__)
 
 
 class EosGroups(EosBase):
-    def get_group(self, group: float) -> GroupProperties:
-        group_data_count = 0
-        group_chans = None
-        group_props = None
-
-        def handler(addr: str, *args: List[Any]) -> None:
-            nonlocal group_data_count
-            group_data_count += 1
-
-            if "channels" in addr:
-                nonlocal group_chans
-                group_chans = args[2:]
-            else:
-                nonlocal group_props
-                group_props = args
-
-        filter = self.dispatcher.map(f"/eos/out/get/group/{group:g}*", handler)
-        self.write(f"/eos/get/group/{group:g}")
-        self.handle_messages()
-
-        if group_data_count != 2:
-            raise EosException(
-                f"Didn't receive all data for group ({group_data_count})"
-            )
-
-        self.dispatcher.unmap(f"/eos/out/get/group/{group:g}*", filter)
-        return GroupProperties.from_list(group, group_props, group_chans)
-
     def record_group(self, group: GroupProperties, overwrite: bool = False) -> None:
         self.open_tab(EosTab.GROUPS)
         try:

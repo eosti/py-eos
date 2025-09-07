@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from eos.base import EosBase, EosTargets
-from eos.types import EosProperties, RefDataProperties, EosException, EosRange, CueProperties, Cue
+from eos.types import EosProperties, RefDataProperties, EosException, EosRange, CueProperties, Cue, GroupProperties, MacroProperties
 from decimal import Decimal
 from typing import List, Any
 import logging
@@ -51,8 +51,38 @@ class EosIterator(ABC):
         self.eos.write(f"/eos/set/{self.target}/{num}/label='{label}'")
 
     @abstractmethod
-    def _getQuery(self, query_str: str) -> EosProperties:
+    def _query_handler_logic(self, addr: str, args: List[any]):
         pass
+
+    def _getQuery(self, query_str: str) -> EosProperties:
+        data_count = 0
+        self.output_data = None
+
+        def handler(addr: str, *args: List[Any]) -> None:
+            nonlocal data_count
+            data_count += 1
+            self._query_handler_logic(addr, args)
+
+        filter = self.eos.dispatcher.map(f"/eos/out/get/{self.target}/*", handler)
+        self.eos.write(f"/eos/{query_str}")
+        self.eos.handle_messages()
+
+        if data_count != EosTargets[self.target]:
+            raise EosException(
+                f"Didn't receive all data for {self.target} ({data_count})"
+            )
+
+        self.eos.dispatcher.unmap(f"/eos/out/get/{self.target}/*", filter)
+        return self.output_data
+
+    def _genericChanParser(self, addr: str, args: List[Any]) -> List[int]:
+        if len(args) <= 2:
+            return None
+
+        chan_list = []
+        for i in args[2:]:
+            chan_list += EosRange(i).to_individual()
+        return chan_list
 
 
 class EosRefDataIterator(EosIterator):
@@ -68,36 +98,18 @@ class EosRefDataIterator(EosIterator):
     def fire(self, num: Decimal) -> None:
         self.eos.write(f"/eos/{self.target}/fire={num}")
 
-    def _getQuery(self, query_str: str) -> RefDataProperties:
-        data_count = 0
-        output_data = None
+    def _query_handler_logic(self, addr: str, args: List[Any]) -> None:
+        if "channel" in addr:
+            self.output_data.chans = self._genericChanParser(addr, list(args))
+        elif "byType" in addr:
+            self.output_data.bytype = self._genericChanParser(addr, list(args))
+        elif "fx" in addr:
+            # Presets only
+            self.output_data.fx = self._refDataFXParser(addr, list(args))
+        else:
+            self.output_data = self._refDataInfoParser(addr, list(args))
 
-        def handler(addr: str, *args: List[Any]) -> None:
-            nonlocal data_count
-            nonlocal output_data
-            data_count += 1
-
-            if "channel" in addr:
-                output_data.chans = self._refDataChanParser(addr, list(args))
-            elif "byType" in addr:
-                output_data.bytype = self._refDataByTypeParser(addr, list(args))
-            elif "fx" in addr:
-                # Presets only
-                output_data.fx = self._refDataFXParser(addr, list(args))
-            else:
-                output_data = self._refDataInfoParser(addr, list(args))
-
-        filter = self.eos.dispatcher.map(f"/eos/out/get/{self.target}*", handler)
-        self.eos.write(f"/eos/{query_str}")
-        self.eos.handle_messages()
-        if data_count < 3:
-            raise EosException(
-                f"Didn't receive all data for referenced data ({data_count})"
-            )
-        self.eos.dispatcher.unmap(f"/eos/out/get/{self.target}*", filter)
-        return output_data
-
-    def _refDataInfoParser(self, addr: str, args: List[Any]):
+    def _refDataInfoParser(self, addr: str, args: List[Any]) -> RefDataProperties:
         if len(args) <= 2:
             return None
 
@@ -110,30 +122,67 @@ class EosRefDataIterator(EosIterator):
                 f"Referenced data {self.target} {number} does not exist!"
             )
 
-    def _refDataChanParser(self, addr: str, args: List[Any]):
-        if len(args) <= 2:
-            return None
-
-        chan_list = []
-        for i in args[2:]:
-            chan_list += EosRange(i).to_individual()
-        return chan_list
-
-    def _refDataByTypeParser(self, addr: str, args: List[Any]):
-        if len(args) <= 2:
-            return None
-
-        chan_list = []
-        for i in args[2:]:
-            chan_list += EosRange(i).to_individual()
-        return chan_list
-
     def _refDataFXParser(self, addr: str, args: List[Any]):
         if len(args) <= 2:
             return None
 
         logger.warning("No logic to parse fx!")
         logger.info(args)
+
+
+class EosGroupIterator(EosIterator):
+    def __init__(self, eos: EosBase):
+        super().__init__(eos, "group")
+
+    def _query_handler_logic(self, addr: str, args: List[Any]):
+        if "channels" in addr:
+            self.output_data.chans = self._genericChanParser(addr, list(args))
+        else:
+            self.output_data = self._groupInfoParser(addr, list(args))
+
+    def _groupInfoParser(self, addr: str, args: List[Any]):
+        if len(args) <= 2:
+            return None
+
+        number = addr.split("/")[5]
+        try:
+            return GroupProperties.from_list(number, args)
+        except IndexError:
+            logger.error(args)
+            raise EosException(
+                f"{self.target.capitalize()} {number} does not exist!"
+            )
+
+
+class EosMacroIterator(EosIterator):
+    def __init__(self, eos: EosBase):
+        super().__init__(eos, "macro")
+
+    def _query_handler_logic(self, addr: str, args: List[Any]):
+        if "text" in addr:
+            self.output_data.command = self._macroTextParser(addr, list(args))
+        else:
+            self.output_data = self._macroInfoParser(addr, list(args))
+
+    def _macroTextParser(self, addr: str, args: List[Any]):
+        if len(args) <= 2:
+            return None
+
+        return ''.join(args[2:])
+
+    def _macroInfoParser(self, addr: str, args: List[Any]):
+        if len(args) <= 2:
+            return None
+
+        number = addr.split("/")[5]
+        try:
+            return MacroProperties.from_list(number, args)
+        except IndexError:
+            logger.error(args)
+            raise EosException(
+                f"{self.target.capitalize()} {number} does not exist!"
+            )
+
 
 
 class EosCueIterator(EosIterator):
@@ -153,32 +202,16 @@ class EosCueIterator(EosIterator):
     def get_by_idx(self, idx: int):
         raise NotImplementedError("Please use EosCuesIterator")
 
-    def _getQuery(self, query_str: str) -> CueProperties:
-        cue_data_count = 0
-        output_cue = None
-
-        def handler(addr: str, *args: List[Any]) -> None:
-            nonlocal cue_data_count
-            nonlocal output_cue
-            cue_data_count += 1
-
-            if "fx" in addr:
-                output_cue.fx = self._cueFXParser(addr, list(args))
-            elif "links" in addr:
-                output_cue.links2 = self._cueLinksParser(addr, list(args))
-            elif "actions" in addr:
-                output_cue.actions = self._cueActionsParser(addr, list(args))
-            else:
-                # Assume this one comes in first
-                output_cue = self._cueInfoParser(addr, list(args))
-
-        filter = self.eos.dispatcher.map("/eos/out/get/cue/*", handler)
-        self.eos.write(f"/eos/{query_str}")
-        self.eos.handle_messages()
-        if cue_data_count != 4:
-            raise EosException(f"Didn't receive all data for cue ({cue_data_count})")
-        self.eos.dispatcher.unmap("/eos/out/get/cue/*", filter)
-        return output_cue
+    def _query_handler_logic(self, addr: str, args: List[Any]):
+        if "fx" in addr:
+            self.output_data.fx = self._cueFXParser(addr, list(args))
+        elif "links" in addr:
+            self.output_data.links2 = self._cueLinksParser(addr, list(args))
+        elif "actions" in addr:
+            self.output_data.actions = self._cueActionsParser(addr, list(args))
+        else:
+            # Assume this one comes in first
+            self.output_data = self._cueInfoParser(addr, list(args))
 
     def _cueInfoParser(self, addr: str, args: List[Any]) -> CueProperties:
         cuelist = addr.split("/")[5]
