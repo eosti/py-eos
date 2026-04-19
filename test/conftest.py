@@ -1,4 +1,5 @@
 import pytest
+
 from eos import EosSLIP
 
 
@@ -6,3 +7,5 @@ from eos import EosSLIP
 def eos():
     eos = EosSLIP("localhost", 3032)
     yield eos
+    eos.live()
+    eos.clear_cmd_line()

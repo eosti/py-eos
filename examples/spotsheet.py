@@ -1,10 +1,8 @@
 import csv
 import logging
-import time
 from dataclasses import dataclass
-from typing import Optional
 
-from eos import Cue, CueProperties, EosException, EosSLIP
+from eos import EosSLIP
 
 # Alternate idea: put character in FP, then poll channel for spot info
 
@@ -14,8 +12,8 @@ class FollowspotCue:
     cue: float
     action: str
     time: float
-    character: Optional[str] = None
-    notes: Optional[str] = None
+    character: str | None = None
+    notes: str | None = None
 
     def to_list(self):
         return [self.cue, self.action, self.time, self.character, self.notes]
@@ -52,9 +50,7 @@ for i in range(cue_index):
             if len(cue.label.split(" ")) > 1:
                 notes = cue.label.split(" ", 1)[1]
 
-        fs_cues.append(
-            FollowspotCue(cue.cue, action, cue.uptime / 1000, character, notes)
-        )
+        fs_cues.append(FollowspotCue(cue.cue, action, cue.uptime / 1000, character, notes))
 
 
 logging.info(f"{len(fs_cues)} cues collected")

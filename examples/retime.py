@@ -1,7 +1,7 @@
 import logging
 import time
 
-from eos import Cue, CueProperties, EosException, EosSLIP
+from eos import Cue, EosSLIP
 
 # Sorry for the mixed units...
 DEFAULT_CUETIME_MS = 2900

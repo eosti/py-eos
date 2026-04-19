@@ -1,10 +1,13 @@
+"""Collection of helpers for various Eos things."""
+
+import itertools
 from abc import ABC
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import IntEnum
-from typing import Any, Callable, List, Optional, Union
+from typing import Any, Self
 
-import itertools
 # TODO: how to make changing the attributes in CueProperties actually affect the cue?
 # Then we could get rid of setters entirely, which would be nice
 # Make a custom @property tag that allows for a keycommand or something passed to it
@@ -20,25 +23,28 @@ class EosTimeout(EosException):
     pass
 
 
+class EosCmdLineException(EosException):
+    pass
+
+
 @dataclass
 class ReceivedOSC:
     address: str
     typetags: str
-    data: List[Any]
+    data: list[Any]
 
 
 class EosChanSelection:
-    """Stores ranges as individual channels"""
+    """Stores ranges as individual channels."""
 
-    def __init__(self, chans: Union[List[Decimal], set[Decimal]]):
+    def __init__(self, chans: list[Decimal] | set[Decimal]) -> None:
         self.chans: set[Decimal] = set(chans)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self.chans)
 
     def __iter__(self):
-        for i in self.chans:
-            yield i
+        yield from self.chans
 
     def __eq__(self, other):
         if isinstance(other, EosChanSelection):
@@ -46,7 +52,7 @@ class EosChanSelection:
         return False
 
     @classmethod
-    def from_eos_arg(cls, eos_arg: List[Any]):
+    def from_eos_arg(cls, eos_arg: list[Any]):
         chan_list = []
         for i in eos_arg:
             if isinstance(i, (Decimal, int, float)):
@@ -74,14 +80,14 @@ class EosChanSelection:
         sorted_chans = sorted(set(self.chans))
 
         def ranges(i):
-            for key, group in itertools.groupby(enumerate(i), lambda t: t[1] - t[0]):
+            for _key, group in itertools.groupby(enumerate(i), lambda t: t[1] - t[0]):
                 group = list(group)
                 yield group[0][1], group[-1][1]
 
         return list(ranges(sorted_chans))
 
     def eos_command(self) -> str:
-        """Returns an Eos cmd string that contains all channels in range"""
+        """Returns an Eos cmd string that contains all channels in range."""
         command = ""
         for idx, val in enumerate(self.to_ranges()):
             if val[0] == val[1]:
@@ -102,22 +108,27 @@ class EosChanSelection:
 
 @dataclass
 class EosActiveChannel:
-    """Stores information about the active channel"""
+    """Stores information about the active channel."""
+
     chan: EosChanSelection
     intens: int
     fixture_type: str
     fixture_version: int
 
     @classmethod
-    def from_args(cls, args: List[Any]):
+    def from_args(cls, args: list[Any]):
         if args[0] == "":
             return None
         chan = EosChanSelection.from_active_chans(args[0].split("[")[0])
         intens = int(args[0].split("[")[1].split("]")[0])
 
         fixture = args[0].split("]")[1]
-        fixture_type = fixture.split("@")[0].strip()
-        fixture_version = int(fixture.split("@")[1])
+        if fixture == "":
+            fixture_type = "Unpatched"
+            fixture_version = -1
+        else:
+            fixture_type = fixture.split("@")[0].strip()
+            fixture_version = int(fixture.split("@")[1])
 
         return cls(chan, intens, fixture_type, fixture_version)
 
@@ -127,16 +138,15 @@ class Cue:
     cuelist: int
     cue: Decimal
     part: int = 0
-    duration: Optional[int] = None
-    percentage: Optional[float] = None
+    duration: int | None = None
+    percentage: float | None = None
 
     # Spaces around the / are MANDATORY
     # The :g is needed to print 10, not 10.0
     def cue_format(self) -> str:
         if self.part == 0:
             return f"{self.cuelist:g} / {self.cue:g}"
-        else:
-            return f"{self.cuelist:g} / {self.cue:g} Part {self.part:g}"
+        return f"{self.cuelist:g} / {self.cue:g} Part {self.part:g}"
 
     # TODO: hint return self in 3.11
     @classmethod
@@ -151,15 +161,14 @@ class Cue:
 
         if len(fields) == 2:
             return cls(cuelist, cue, fields[1])
-        else:
-            return cls(cuelist, cue, fields[1], float(fields[-1].strip("%")) / 100.0)
+        return cls(cuelist, cue, fields[1], float(fields[-1].strip("%")) / 100.0)
 
 
 @dataclass
 class EosProperties(ABC):
     number: Decimal
     # Ignore this field in equality since Eos sometimes doesn't give this value
-    index: Optional[int] = field(compare=False)
+    index: int | None = field(compare=False)
     uid: str
     label: str
 
@@ -195,7 +204,7 @@ class CueProperties(EosProperties):
     markstr: str
     blockstr: str
     assertstr: str
-    links: Union[str, float]
+    links: str | float
 
     followtime: float
     hangtime: float
@@ -209,12 +218,12 @@ class CueProperties(EosProperties):
     scene_end: bool
     cuepartindex: int
 
-    fx: Optional[str] = None
-    actions: Optional[str] = None
-    links2: Optional[str] = None
+    fx: str | None = None
+    actions: str | None = None
+    links2: str | None = None
 
     @classmethod
-    def from_list(cls, cuelist: int, cue: Decimal, part: int, msg: List[Any]):
+    def from_list(cls, cuelist: int, cue: Decimal, part: int, msg: list[Any]):
         return cls(
             cue,
             msg[0],
@@ -255,55 +264,85 @@ class CueProperties(EosProperties):
 
 @dataclass
 class GroupProperties(EosProperties):
-    chans: Optional[EosChanSelection] = None
+    chans: EosChanSelection | None = None
 
     @classmethod
-    def from_list(cls, grp: Decimal, props: List):
+    def from_list(cls, grp: Decimal, props: list):
         return cls(grp, props[0], props[1], props[2])
 
 
 @dataclass
 class MacroProperties(EosProperties):
     mode: str
-    command: Optional[List[str]] = None
+    command: list[str] | None = None
 
     @classmethod
-    def from_list(cls, macro: Decimal, props: List):
+    def from_list(cls, macro: Decimal, props: list):
         return cls(macro, props[0], props[1], props[2], props[3])
 
 
 @dataclass
 class RefDataProperties(EosProperties):
+    """Collection of properties for referenced data."""
+
     absolute: bool
     locked: bool
 
-    chans: Optional[EosChanSelection] = None
-    bytype: Optional[EosChanSelection] = None
-    fx: Optional[str] = None
+    chans: EosChanSelection | None = None
+    bytype: EosChanSelection | None = None
+    fx: str | None = None
 
     @classmethod
-    def from_list(cls, number: Decimal, msg: List[Any]):
-        return cls(number, msg[0], msg[1], msg[2], msg[3], msg[4])
+    def from_list(cls, number: Decimal, props: list[Any]):
+        """Create a RefDataProperties from a list of properties."""
+        return cls(number, *props)
+
+
+@dataclass
+class CueListProperties(EosProperties):
+    """Collection of properties from a cue list."""
+
+    playback_mode: str
+    fader_mode: str
+    independent: bool
+    htp: bool
+    assert_state: bool
+    block: bool
+    background: bool
+    solo_mode: bool
+    timecode_list: int
+    oos_sync: bool
+
+    links: list[int] | None = None
+
+    @classmethod
+    def from_list(cls, number: Decimal, props: list[Any]):
+        """Create a CueListProperties from a list of properties."""
+        return cls(number, *props)
 
 
 @dataclass
 class OSCFilter:
     filter_str: str
-    callback: Optional[Callable[[ReceivedOSC], Any]] = None
+    callback: Callable[[ReceivedOSC], Any] | None = None
 
     def do_callback(self, data: ReceivedOSC) -> Any:
+        """Execute the associated callback."""
         if self.callback is not None:
             return self.callback(data)
-        else:
-            return data
+        return data
 
 
 class EosState(IntEnum):
+    """Enum mapping Eos state to ints."""
+
     BLIND = 0
     LIVE = 1
 
 
 class EosWheelCategory(IntEnum):
+    """Enum mapping Eos wheel categories to ints."""
+
     UNASSIGNED = 0
     INTENSITY = 1
     FOCUS = 2
@@ -315,6 +354,8 @@ class EosWheelCategory(IntEnum):
 
 @dataclass
 class EosWheel:
+    """Eos Wheel dataclass."""
+
     number: int
     name: str
     pretty_value: int
@@ -322,13 +363,12 @@ class EosWheel:
     category: EosWheelCategory
 
     @classmethod
-    def from_args(cls, num: int, args: List[Any]):
+    def from_args(cls, num: int, args: list[Any]) -> Self:
+        """Create an EosWheel from OSC arguments."""
         name = args[0].split("[")[0].strip()
         pretty_value = int(args[0].split("[")[1].replace("]", ""))
 
-        return cls(
-            num, name, pretty_value, Decimal(args[2]), EosWheelCategory(int(args[1]))
-        )
+        return cls(num, name, pretty_value, Decimal(args[2]), EosWheelCategory(int(args[1])))
 
 
 """
@@ -356,6 +396,8 @@ EosTargets = {
 
 
 class EosTab(IntEnum):
+    """Enum mapping tab names to tab numbers."""
+
     AUGMENT3D = 38
     BEAM_PALATTES = 25
     CHANNELS_TABLE = 1

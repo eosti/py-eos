@@ -1,7 +1,7 @@
-"""Macro-related functionality"""
+"""Macro-related functionality."""
+
 import logging
 import time
-from typing import List
 from abc import ABC
 from decimal import Decimal
 
@@ -13,21 +13,21 @@ logger = logging.getLogger(__name__)
 
 
 class EosMacros(ABC, EosBase):
-    """Mixin for macro-related actions"""
+    """Mixin for macro-related actions."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.macro = EosMacroIterator(self)
 
         super().__init__()
 
-    def record_macro(self, macro: Decimal, commands: List[str]):
-        """Record a macro with a given command sequence"""
+    def record_macro(self, macro: Decimal, commands: list[str]) -> None:
+        """Record a macro with a given command sequence."""
         # TODO not working lol
         self.open_tab(EosTab.MACROS)
         try:
             self.macro.get(macro)
         except EosException:
-            logging.info("Recording new macro %f", macro)
+            logger.info("Recording new macro %f", macro)
             self.send_command(str(macro) + "#")
             self.press_key("softkey_6")
             time.sleep(0.1)

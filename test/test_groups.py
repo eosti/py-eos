@@ -1,6 +1,8 @@
-import pytest
-from eos import Eos, EosException
 import time
+
+import pytest
+
+from eos import Eos, EosException
 
 
 class TestEosGroups:
@@ -27,10 +29,17 @@ class TestEosGroups:
 
         # Try overwriting it without overwrite
         with pytest.raises(EosException):
-            eos.record_group(self.test_group_num, self.test_group_chans, label=self.test_group_label)
+            eos.record_group(
+                self.test_group_num, self.test_group_chans, label=self.test_group_label
+            )
 
         # Overwrite the label
-        eos.record_group(self.test_group_num, self.test_group_chans, label=self.test_group_label + " NEW", overwrite=True)
+        eos.record_group(
+            self.test_group_num,
+            self.test_group_chans,
+            label=self.test_group_label + " NEW",
+            overwrite=True,
+        )
         time.sleep(0.1)
         created_group = eos.group.get(self.test_group_num)
 
@@ -39,7 +48,9 @@ class TestEosGroups:
         assert set(created_group.chans) == set(self.test_group_chans)
 
         # Overwrite the channels
-        eos.record_group(self.test_group_num, [5], label=self.test_group_label + " NEW", overwrite=True)
+        eos.record_group(
+            self.test_group_num, [5], label=self.test_group_label + " NEW", overwrite=True
+        )
         time.sleep(0.1)
         created_group = eos.group.get(self.test_group_num)
 

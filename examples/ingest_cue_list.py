@@ -1,17 +1,17 @@
-from eos import EosSLIP, Cue
-
 import argparse
-import os
-import logging
 import csv
-from dataclasses import dataclass
+import logging
+import os
 import time
+from dataclasses import dataclass
+
+from eos import Cue, EosSLIP
 
 # Before running this, make a Q1 with hard zeroes and everything set to preset home
 
 
 @dataclass
-class CuelistCue():
+class CuelistCue:
     number: int
     label: str
     flags: list[str]
@@ -34,7 +34,7 @@ def main():
 
     all_cues = []
 
-    with open(args.csv, mode='r') as f:
+    with open(args.csv) as f:
         csvfile = csv.reader(f)
         for i, line in enumerate(csvfile):
             if i < args.start_row:
@@ -43,7 +43,7 @@ def main():
             # Ingest assuming Q#, page #, placement, notes, flags, flags
             cue_label = f"Pg. {line[1]}: {line[2]}"
             if line[3] != "":
-                cue_label += (f" ({line[3]})")
+                cue_label += f" ({line[3]})"
             flags = line[4].split(" ")
             flags.append(line[5])
             flags = list(filter(None, flags))
@@ -51,7 +51,7 @@ def main():
             all_cues.append(CuelistCue(float(line[0]), cue_label, flags))
 
     logging.info("Parsed %i cues", len(all_cues))
-    
+
     eos = EosSLIP("localhost", 3032)
 
     for i in all_cues:
@@ -79,7 +79,7 @@ def main():
             eos.mark_low_cue(mark_part)
             eos.label_cue(mark_part, "--- MARK ---")
         if next((s for s in i.flags if "Sc" in s), None):
-            scene_marker = next((s for s in i.flags if "Sc" in s)).split(" ", 1)[1]
+            scene_marker = next(s for s in i.flags if "Sc" in s).split(" ", 1)[1]
             eos.add_scene(this_cue, scene_marker)
 
 

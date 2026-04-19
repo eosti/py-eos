@@ -1,4 +1,4 @@
-from .eos import EosSLIP, Eos
+from .eos import Eos, EosSLIP
 from .helpers import Cue, EosException
 
-__all__ = ["EosSLIP", "Cue", "EosException", "Eos"]
+__all__ = ["Cue", "Eos", "EosException", "EosSLIP"]

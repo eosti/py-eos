@@ -1,11 +1,12 @@
-from strictyaml import load, Map, Str, Seq, Float, Bool, Optional
-from path import Path
-from eos import EosSLIP, Cue
-
 import argparse
-import os
 import logging
+import os
 import time
+
+from path import Path
+from strictyaml import Bool, Float, Map, Optional, Seq, Str, load
+
+from eos import Cue, EosSLIP
 
 # Before running this, make a Q1 with hard zeros and everything set to preset home
 
@@ -26,11 +27,13 @@ def main():
 
     eos = EosSLIP("localhost", 3032)
 
-    scene_schema = Map({'name': Str(), 'start': Float(), Optional("no_label", default=False): Bool()})
-    config_schema = Map({'blackout_offset': Float()})
-    root_schema = Map({'scenes': Seq(scene_schema), 'config': config_schema})
+    scene_schema = Map(
+        {"name": Str(), "start": Float(), Optional("no_label", default=False): Bool()}
+    )
+    config_schema = Map({"blackout_offset": Float()})
+    root_schema = Map({"scenes": Seq(scene_schema), "config": config_schema})
 
-    input_data = load(Path(args.yaml).bytes().decode('utf-8'), root_schema)
+    input_data = load(Path(args.yaml).bytes().decode("utf-8"), root_schema)
 
     blackout_group = 41
     blackout_preset = 0.1
