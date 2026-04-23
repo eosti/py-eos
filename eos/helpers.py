@@ -37,8 +37,9 @@ class ReceivedOSC:
 class EosChanSelection:
     """Stores ranges as individual channels."""
 
-    def __init__(self, chans: list[Decimal] | set[Decimal]) -> None:
-        self.chans: set[Decimal] = set(chans)
+    def __init__(self, chans: list[Decimal | str] | set[Decimal | str]) -> None:
+        dec_chans = [Decimal(x) for x in chans]
+        self.chans: set[Decimal] = sorted(set(dec_chans))
 
     def __repr__(self) -> str:
         return str(self.chans)
@@ -73,7 +74,11 @@ class EosChanSelection:
         split_str = active_chans.split(",")
         chan_list = []
         for i in split_str:
-            chan_list.append(Decimal(i))
+            if "-" in i:
+                start_val, end_val = i.split('-')
+                chan_list.extend(Decimal(x) for x in range(int(start_val), int(end_val) + 1))
+            else:
+                chan_list.append(Decimal(i))
         return cls(sorted(chan_list))
 
     def to_ranges(self) -> list[tuple[Decimal, Decimal]]:
@@ -86,10 +91,26 @@ class EosChanSelection:
 
         return list(ranges(sorted_chans))
 
+    def eos_repr(self) -> str:
+        """Return the channel selection in an Eos-formatted way."""
+        printstr = ""
+        for idx, val in enumerate(self.to_ranges()):
+            if val[0] == val[1]:
+                # Single value
+                printstr += str(val[0])
+            else:
+                # Range
+                printstr += f"{val[0]}>{val[1]}"
+
+            printstr += " "
+
+        return printstr.strip()
+
     def eos_command(self) -> str:
         """Returns an Eos cmd string that contains all channels in range."""
         command = ""
-        for idx, val in enumerate(self.to_ranges()):
+        ranges = self.to_ranges()
+        for idx, val in enumerate(ranges):
             if val[0] == val[1]:
                 # Single value
                 chanstr = str(val[0])
@@ -97,7 +118,7 @@ class EosChanSelection:
                 # Range
                 chanstr = f"{val[0]} Thru {val[1]}"
 
-            if idx < len(self.chans) - 1:
+            if idx < len(ranges) - 1:
                 # Not the last channel
                 chanstr += " +"
 
@@ -128,7 +149,10 @@ class EosActiveChannel:
             fixture_version = -1
         else:
             fixture_type = fixture.split("@")[0].strip()
-            fixture_version = int(fixture.split("@")[1])
+            try:
+                fixture_version = int(fixture.split("@")[1])
+            except IndexError:
+                fixture_version = -1
 
         return cls(chan, intens, fixture_type, fixture_version)
 

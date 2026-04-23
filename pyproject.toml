@@ -13,7 +13,7 @@ requires-python = ">=3.12"
 dependencies = ["python-osc (>=1.9.3,<2.0)", "path (>=17.1.0,<18.0.0)", "strictyaml (>=1.7.3,<2.0.0)"]
 
 [project.optional-dependencies]
-examples = ["pandas (>=2.3.2,<3.0.0)", "openpyxl (>=3.1.5,<4.0.0)"]
+examples = ["pandas (>=2.3.2,<3.0.0)", "openpyxl (>=3.1.5,<4.0.0)", "lighting-paperwork (>=0.1.6)"]
 
 [dependency-groups]
 dev = [

@@ -9,7 +9,7 @@ from pythonosc.dispatcher import Dispatcher
 from pythonosc.osc_packet import OscPacket
 from pythonosc.osc_tcp_server import MODE_1_1
 from pythonosc.tcp_client import SimpleTCPClient
-from pythonosc.udp_client import BlockingOSCUDPServer, SimpleUDPClient
+from pythonosc.udp_client import SimpleUDPClient
 
 from eos.cues import EosCues
 from eos.groups import EosGroups
@@ -103,7 +103,7 @@ class EosTCP(Eos):
             logger.debug(path)
             self.client.send_message(path)
         else:
-            logger.debug(path, args)
+            logger.debug("%s %s", path, args)
             self.client.send_message(path, args)
 
     @override
