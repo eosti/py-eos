@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 from pythonosc.osc_packet import OscPacket
 
-from eos.helpers import EosException, EosTab, EosTargets
+from eos.helpers import EosExceptionError, EosTab, EosTargets
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +97,7 @@ class EosBase:
         self.handle_messages()
 
         if target_count is None:
-            raise EosException(f"Unable to get number of targets for {target}")
+            raise EosExceptionError(f"Unable to get number of targets for {target}")
 
         self.dispatcher.unmap(f"/eos/out/{query_str}", osc_filter)
         return target_count

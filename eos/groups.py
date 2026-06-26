@@ -5,7 +5,13 @@ from abc import ABC
 from decimal import Decimal
 
 from eos.base import EosBase
-from eos.helpers import EosChanSelection, EosCmdLineException, EosException, EosTab, GroupProperties
+from eos.helpers import (
+    EosChanSelection,
+    EosCmdLineError,
+    EosExceptionError,
+    EosTab,
+    GroupProperties,
+)
 from eos.iterator import EosGroupIterator
 
 logger = logging.getLogger(__name__)
@@ -55,8 +61,6 @@ class EosGroups(ABC, EosBase):
         group_num: Decimal,
         chans: list | EosChanSelection,
         label: str | None = None,
-        *,
-        overwrite: bool = False,
     ) -> None:
         """Record a group."""
         self.open_tab(EosTab.GROUPS)
@@ -65,10 +69,10 @@ class EosGroups(ABC, EosBase):
 
         try:
             self.group.get(group_num)
-        except EosException:
+        except EosExceptionError:
             self.new_group(group_num, chans, label)
         else:
-            raise EosException("Group already exists!")
+            raise EosExceptionError("Group already exists!")
 
     def record_group_overwrite(
         self,
@@ -82,7 +86,7 @@ class EosGroups(ABC, EosBase):
             chans = EosChanSelection(chans)
         try:
             grp = self.group.get(group_num)
-        except EosException:
+        except EosExceptionError:
             self.new_group(group_num, chans, label)
         else:
             self.update_group(grp, group_num, chans, label)

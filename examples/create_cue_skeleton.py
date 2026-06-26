@@ -18,7 +18,7 @@ def text_file(path: str) -> str:
     return path
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("yaml", help="YAML config file", type=text_file)
 
@@ -34,9 +34,6 @@ def main():
     root_schema = Map({"scenes": Seq(scene_schema), "config": config_schema})
 
     input_data = load(Path(args.yaml).bytes().decode("utf-8"), root_schema)
-
-    blackout_group = 41
-    blackout_preset = 0.1
 
     for i in input_data["scenes"].data:
         # Create blackout cue first

@@ -6,7 +6,7 @@ from abc import ABC
 from decimal import Decimal
 
 from eos.base import EosBase
-from eos.helpers import EosException, EosTab
+from eos.helpers import EosExceptionError, EosTab
 from eos.iterator import EosMacroIterator
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ class EosMacros(ABC, EosBase):
         self.open_tab(EosTab.MACROS)
         try:
             self.macro.get(macro)
-        except EosException:
+        except EosExceptionError:
             logger.info("Recording new macro %f", macro)
             self.send_command(str(macro) + "#")
             self.press_key("softkey_6")
@@ -35,4 +35,4 @@ class EosMacros(ABC, EosBase):
                 self.press_key(i)
             self.press_key("Select")
         else:
-            raise EosException(f"Macro {macro} already exists!")
+            raise EosExceptionError(f"Macro {macro} already exists!")

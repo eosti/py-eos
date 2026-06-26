@@ -6,7 +6,7 @@ class TestEosCues:
     test_cue_num = 1234
     test_cue_label = "Testing Cue"
 
-    def test_cue_creation(self, eos: Eos):
+    def test_cue_creation(self, eos: Eos) -> None:
+        """Test the creation of a cue."""
         return
-        cue_iterator = None
-        start_num_cues = eos.cue.get_count()
+        eos.cue.get_count()

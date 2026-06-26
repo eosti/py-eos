@@ -15,29 +15,23 @@ from typing import Any, Self
 # Use namedtuple for immutable data, like Cue (?) or freeze the dataclass.
 
 
-class EosException(Exception):
-    pass
+class EosExceptionError(Exception):
+    """Generic Eos exception."""
 
 
-class EosTimeout(EosException):
-    pass
+class EosTimeoutError(EosExceptionError):
+    """Timeout communicating with Eos."""
 
 
-class EosCmdLineException(EosException):
-    pass
-
-
-@dataclass
-class ReceivedOSC:
-    address: str
-    typetags: str
-    data: list[Any]
+class EosCmdLineError(EosExceptionError):
+    """Command line error exception."""
 
 
 class EosChanSelection:
     """Stores ranges as individual channels."""
 
     def __init__(self, chans: list[Decimal | str] | set[Decimal | str]) -> None:
+        """Create a new channel selection from list of individual channels."""
         dec_chans = [Decimal(x) for x in chans]
         self.chans: set[Decimal] = sorted(set(dec_chans))
 
@@ -52,8 +46,15 @@ class EosChanSelection:
             return self.chans == other.chans
         return False
 
+    def __hash__(self):
+        return hash(self.chans)
+
     @classmethod
     def from_eos_arg(cls, eos_arg: list[Any]):
+        """Generate a Eos channel selection from an Eos range.
+
+        ex. "1-4 7 9 12-24"
+        """
         chan_list = []
         for i in eos_arg:
             if isinstance(i, (Decimal, int, float)):
@@ -71,17 +72,19 @@ class EosChanSelection:
 
     @classmethod
     def from_active_chans(cls, active_chans: str):
+        """Generate an Eos channel selection from the Eos active channels."""
         split_str = active_chans.split(",")
         chan_list = []
         for i in split_str:
             if "-" in i:
-                start_val, end_val = i.split('-')
+                start_val, end_val = i.split("-")
                 chan_list.extend(Decimal(x) for x in range(int(start_val), int(end_val) + 1))
             else:
                 chan_list.append(Decimal(i))
         return cls(sorted(chan_list))
 
     def to_ranges(self) -> list[tuple[Decimal, Decimal]]:
+        """Convert a list of channels to a list of tuples with inclusive ranges."""
         sorted_chans = sorted(set(self.chans))
 
         def ranges(i):
@@ -94,7 +97,7 @@ class EosChanSelection:
     def eos_repr(self) -> str:
         """Return the channel selection in an Eos-formatted way."""
         printstr = ""
-        for idx, val in enumerate(self.to_ranges()):
+        for _idx, val in enumerate(self.to_ranges()):
             if val[0] == val[1]:
                 # Single value
                 printstr += str(val[0])
@@ -343,18 +346,6 @@ class CueListProperties(EosProperties):
     def from_list(cls, number: Decimal, props: list[Any]):
         """Create a CueListProperties from a list of properties."""
         return cls(number, *props)
-
-
-@dataclass
-class OSCFilter:
-    filter_str: str
-    callback: Callable[[ReceivedOSC], Any] | None = None
-
-    def do_callback(self, data: ReceivedOSC) -> Any:
-        """Execute the associated callback."""
-        if self.callback is not None:
-            return self.callback(data)
-        return data
 
 
 class EosState(IntEnum):

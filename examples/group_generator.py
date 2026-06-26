@@ -1,21 +1,25 @@
-from lighting_paperwork.vectorworks_xml import VWExport
+"""Todo: TUI to select which groups to make and have a visual diff."""
+
 import argparse
 import logging
-from rich.logging import RichHandler
-from rich.console import Console
-from rich.table import Table
-from rich.prompt import Confirm
-import pandas as pd
 from decimal import Decimal
-from eos.helpers import EosChanSelection, GroupProperties, EosException
+
+import pandas as pd
+from lighting_paperwork.vectorworks_xml import VWExport
+from rich.console import Console
+from rich.logging import RichHandler
+from rich.prompt import Confirm
+from rich.table import Table
+
 from eos import Eos, EosSLIP
+from eos.helpers import EosChanSelection, EosException, GroupProperties
 
 logger = logging.getLogger(__name__)
 
 GROUP_CUTOFF_VALUE = 2
 
 
-def main(argv = None):
+def main(argv=None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("file", help="CSV or XML from Vectorworks")
 
@@ -31,10 +35,7 @@ def main(argv = None):
 
     vw_export = VWExport(args.file).export_df()
 
-    filter_fields = [
-        "Purpose",
-        "Channel"
-    ]
+    filter_fields = ["Purpose", "Channel"]
 
     df = pd.DataFrame(vw_export[filter_fields], columns=filter_fields)
 
@@ -84,15 +85,14 @@ def check_for_existing_group(eos: Eos, console: Console, group: GroupProperties)
         True if the group already exists and the group is identical
         False if the group already exists and the user does want to overwrite
         False if the group does not already exist
-    """
 
+    """
     try:
         grp = eos.group.get(group.number)
     except EosException:
         # Group does not exist
         return False
     else:
-        print(grp)
         table = Table(title=f"Conflicting Group {group.number}")
         table.add_column("Field", justify="left", no_wrap=True)
         table.add_column("Eos", justify="left", style="red")
@@ -110,14 +110,10 @@ def check_for_existing_group(eos: Eos, console: Console, group: GroupProperties)
         if not table.rows:
             console.print(f"Group {group.number} exists but no differences found.")
             return True
-        
+
         console.print(table)
         resp = Confirm.ask("Overwrite Eos?")
-        if resp:
-            return False
-        else:
-            return True
-
+        return not resp
 
 
 def generate_groups(df) -> list[GroupProperties]:
@@ -136,12 +132,22 @@ def generate_groups(df) -> list[GroupProperties]:
 
         group_num = min([Decimal(x) for x in group_chans])
 
-        group_list.append(GroupProperties(number=group_num, index=None, uid="", label=purp, chans=EosChanSelection(group_chans)))
+        group_list.append(
+            GroupProperties(
+                number=group_num,
+                index=None,
+                uid="",
+                label=purp,
+                chans=EosChanSelection(group_chans),
+            )
+        )
 
     # Second pass: "super-groups" for SR/SL pairs
 
     sr_sl_purposes = [x for x in purposes if any(xs in x for xs in ("SR", "SL"))]
-    super_purposes = [(purp.replace("SR", "").replace("SL", "").strip(), purp) for purp in sr_sl_purposes]
+    super_purposes = [
+        (purp.replace("SR", "").replace("SL", "").strip(), purp) for purp in sr_sl_purposes
+    ]
     while len(super_purposes) > 0:
         super_purp, purp = super_purposes.pop(0)
         purpose_group = [purp]
@@ -161,7 +167,15 @@ def generate_groups(df) -> list[GroupProperties]:
                 continue
             group_chans = super_purpose_df["Channel"].tolist()
             group_num = min([Decimal(x) for x in group_chans]) - 1
-            group_list.append(GroupProperties(number=group_num, index=None, uid="", label=super_purp, chans=EosChanSelection(group_chans)))
+            group_list.append(
+                GroupProperties(
+                    number=group_num,
+                    index=None,
+                    uid="",
+                    label=super_purp,
+                    chans=EosChanSelection(group_chans),
+                )
+            )
 
     return group_list
 

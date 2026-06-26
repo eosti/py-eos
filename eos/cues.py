@@ -6,7 +6,7 @@ from abc import ABC
 from typing import Any
 
 from eos.base import EosBase
-from eos.helpers import Cue, EosException
+from eos.helpers import Cue, EosExceptionError
 from eos.iterator import EosCueIterator
 
 logger = logging.getLogger(__name__)
@@ -67,7 +67,7 @@ class EosCues(ABC, EosBase):
             raise ValueError("cue must have part zero")
         try:
             self.cue.get_cue(cue)
-        except EosException:
+        except EosExceptionError:
             self.send_command(f"Cue {cue.cue_format()} # #")
             time.sleep(self.GENERIC_DELAY)
         # Otherwise, cue already exists!
@@ -79,7 +79,7 @@ class EosCues(ABC, EosBase):
         cue.part = part
         try:
             self.cue.get_cue(cue)
-        except EosException:
+        except EosExceptionError:
             self.send_command(f"Cue {cue.cue_format()} # #")
             time.sleep(0.05)
 

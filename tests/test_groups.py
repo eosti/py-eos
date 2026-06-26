@@ -1,3 +1,5 @@
+"""Tests relating to Eos groups."""
+
 import time
 
 import pytest
@@ -6,11 +8,14 @@ from eos import Eos, EosException
 
 
 class TestEosGroups:
+    """Tests relating to Eos groups."""
+
     test_group_num = 1234
-    test_group_chans = [14, 19, 39, 114, 1]
+    test_group_chans = (14, 19, 39, 114, 1)
     test_group_label = "Testing Group"
 
-    def test_group_creation(self, eos: Eos):
+    def test_group_creation(self, eos: Eos) -> None:
+        """Test the creation of a group."""
         start_num_group = eos.group.get_count()
         assert type(start_num_group) is int
 
@@ -56,17 +61,19 @@ class TestEosGroups:
 
         assert created_group.number == self.test_group_num
         assert created_group.label == self.test_group_label + " NEW"
-        assert set(created_group.chans) == set([5])
+        assert set(created_group.chans) == {5}
 
         # Try to get it by uid
         uid_group = eos.group.get_by_uid(created_group.uid)
         assert uid_group == created_group
 
-    def test_group_iteration(self, eos: Eos):
+    def test_group_iteration(self, eos: Eos) -> None:
+        """Test the group iterator."""
         created_group = eos.group.get(self.test_group_num)
         assert created_group in eos.group
 
-    def test_group_deletion(self, eos: Eos):
+    def test_group_deletion(self, eos: Eos) -> None:
+        """Test the deletion of a group."""
         eos.delete_group(self.test_group_num)
 
         with pytest.raises(EosException):
