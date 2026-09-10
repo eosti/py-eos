@@ -1,20 +1,23 @@
 """Collection of logic for Eos system-level functions."""
 
 import logging
-from abc import ABC
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from eos.base import EosBase
-from eos.helpers import EosActiveChannel, EosExceptionError, EosState, EosWheel
+if TYPE_CHECKING:
+    from eos.eos import Eos
+
+
+from eos.helpers import EosActiveChannel, EosError, EosState, EosWheel
 
 logger = logging.getLogger(__name__)
 
 
-class EosSystem(ABC, EosBase):
+class EosSystem:
     """Mixin for Eos system-level actions."""
 
-    def __init__(self) -> None:
+    def __init__(self, eos: "Eos") -> None:
+        self.eos = eos
         self.wheels: dict[int, EosWheel] = {}
         self.switch: dict[int, EosWheel] = {}
         self.softkeys: list[str | None] = [None] * 12
@@ -32,29 +35,28 @@ class EosSystem(ABC, EosBase):
         self.cmd_line: str
         self.cmd_line_error: bool
 
-        self.dispatcher.map("/eos/out/user", self._updateUserHandler)
-        self.dispatcher.map("/eos/out/show/name", self._updateShowNameHandler)
-        self.dispatcher.map("/eos/out/state", self._updateStateHandler)
-        self.dispatcher.map("/eos/out/event/state", self._updateStateHandler)
-        self.dispatcher.map("/eos/out/locked", self._updateLockedHandler)
-        self.dispatcher.map("/eos/out/event/locked", self._updateLockedHandler)
-        self.dispatcher.map("/eos/out/cmd", self._updateCmdHandler)
-        self.dispatcher.map("/eos/out/user/*", self._updateUserCmdHandler)
-        self.dispatcher.map("/eos/out/softkey/*", self._updateSoftKeyHandler)
-        self.dispatcher.map("/eos/out/active/chan", self._updateActiveChanHandler)
-        self.dispatcher.map("/eos/out/active/wheel/*", self._updateWheelHandler)
-        self.dispatcher.map("/eos/out/wheel", self._resetWheelHandler)
-        self.dispatcher.map("/eos/out/switch", self._resetSwitchHandler)
-        self.dispatcher.map("/eos/out/color/hs", self._updateHSColorHandler)
-        self.dispatcher.map("/eos/out/pantilt", self._updatePanTiltHandler)
-        self.dispatcher.map("/eos/out/xyz", self._updateXYZHandler)
-        super().__init__()
+        self.eos.osc.dispatcher.map("/eos/out/user", self._updateUserHandler)
+        self.eos.osc.dispatcher.map("/eos/out/show/name", self._updateShowNameHandler)
+        self.eos.osc.dispatcher.map("/eos/out/state", self._updateStateHandler)
+        self.eos.osc.dispatcher.map("/eos/out/event/state", self._updateStateHandler)
+        self.eos.osc.dispatcher.map("/eos/out/locked", self._updateLockedHandler)
+        self.eos.osc.dispatcher.map("/eos/out/event/locked", self._updateLockedHandler)
+        self.eos.osc.dispatcher.map("/eos/out/cmd", self._updateCmdHandler)
+        self.eos.osc.dispatcher.map("/eos/out/user/*", self._updateUserCmdHandler)
+        self.eos.osc.dispatcher.map("/eos/out/softkey/*", self._updateSoftKeyHandler)
+        self.eos.osc.dispatcher.map("/eos/out/active/chan", self._updateActiveChanHandler)
+        self.eos.osc.dispatcher.map("/eos/out/active/wheel/*", self._updateWheelHandler)
+        self.eos.osc.dispatcher.map("/eos/out/wheel", self._resetWheelHandler)
+        self.eos.osc.dispatcher.map("/eos/out/switch", self._resetSwitchHandler)
+        self.eos.osc.dispatcher.map("/eos/out/color/hs", self._updateHSColorHandler)
+        self.eos.osc.dispatcher.map("/eos/out/pantilt", self._updatePanTiltHandler)
+        self.eos.osc.dispatcher.map("/eos/out/xyz", self._updateXYZHandler)
 
     def ping(self, message: str = "") -> None:
         """Pings Eos to check for liveness.
 
         Raises:
-            EosExceptionError if no ping back received.
+            EosError if no ping back received.
 
         """
         ping_flag = False
@@ -64,16 +66,16 @@ class EosSystem(ABC, EosBase):
             logger.info("Pong!")
             if args[0] != message:
                 logger.debug(args)
-                raise EosExceptionError("Ping doesn't match pong")
+                raise EosError("Ping doesn't match pong")
             ping_flag = True
 
-        self.write("/eos/ping", message)
-        osc_filter = self.dispatcher.map("/eos/out/ping", handler)
-        self.handle_messages()
+        self.eos.osc.write("/eos/ping", message)
+        osc_filter = self.eos.osc.dispatcher.map("/eos/out/ping", handler)
+        self.eos.osc.handle_messages()
         if ping_flag is False:
-            raise EosExceptionError("No ping response received")
+            raise EosError("No ping response received")
 
-        self.dispatcher.unmap("/eos/out/ping", osc_filter)
+        self.eos.osc.dispatcher.unmap("/eos/out/ping", osc_filter)
 
     def get_version(self) -> str:
         """Gets Eos's current version.
@@ -87,13 +89,13 @@ class EosSystem(ABC, EosBase):
             nonlocal version
             version = args[0]
 
-        self.write("/eos/get/version")
-        osc_filter = self.dispatcher.map("/eos/out/get/version", handler)
-        self.handle_messages()
+        self.eos.osc.write("/eos/get/version")
+        osc_filter = self.eos.osc.dispatcher.map("/eos/out/get/version", handler)
+        self.eos.osc.handle_messages()
         if version is None:
-            raise EosExceptionError("Did not receive version data")
+            raise EosError("Did not receive version data")
 
-        self.dispatcher.unmap("/eos/out/get/version", osc_filter)
+        self.eos.osc.dispatcher.unmap("/eos/out/get/version", osc_filter)
         return version
 
     def _updateUserHandler(self, _addr: str, *args: list[Any]) -> None:

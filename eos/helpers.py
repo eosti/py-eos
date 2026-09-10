@@ -2,7 +2,7 @@
 
 import itertools
 from abc import ABC
-from collections.abc import Callable
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import IntEnum
@@ -15,22 +15,22 @@ from typing import Any, Self
 # Use namedtuple for immutable data, like Cue (?) or freeze the dataclass.
 
 
-class EosExceptionError(Exception):
+class EosError(Exception):
     """Generic Eos exception."""
 
 
-class EosTimeoutError(EosExceptionError):
+class EosTimeoutError(EosError):
     """Timeout communicating with Eos."""
 
 
-class EosCmdLineError(EosExceptionError):
+class EosCmdLineError(EosError):
     """Command line error exception."""
 
 
 class EosChanSelection:
     """Stores ranges as individual channels."""
 
-    def __init__(self, chans: list[Decimal | str] | set[Decimal | str]) -> None:
+    def __init__(self, chans: Sequence[Decimal | str]) -> None:
         """Create a new channel selection from list of individual channels."""
         dec_chans = [Decimal(x) for x in chans]
         self.chans: set[Decimal] = sorted(set(dec_chans))
@@ -157,16 +157,19 @@ class EosActiveChannel:
             except IndexError:
                 fixture_version = -1
 
-        return cls(chan, intens, fixture_type, fixture_version)
+        return cls(
+            chan=chan, intens=intens, fixture_type=fixture_type, fixture_version=fixture_version
+        )
 
 
 @dataclass
 class Cue:
     cuelist: int
-    cue: Decimal
+    cue: int | Decimal
     part: int = 0
-    duration: int | None = None
-    percentage: float | None = None
+    label: str | None = None
+    duration: Decimal | None = None
+    percentage: Decimal | None = None
 
     # Spaces around the / are MANDATORY
     # The :g is needed to print 10, not 10.0
@@ -178,17 +181,33 @@ class Cue:
     # TODO: hint return self in 3.11
     @classmethod
     def empty_cue(cls):
-        return cls(-1, -1, -1, -1)
+        return cls(cuelist=-1, cue=-1, part=-1, duration=None, percentage=None)
 
     @classmethod
-    def fromText(cls, text: str):
+    def from_active_cue(cls, text: str):
+        """Parse cue data from OSC active cue status message."""
         fields = text.split(" ")
         cuelist = int(fields[0].split("/")[0])
         cue = Decimal(fields[0].split("/")[1])
 
-        if len(fields) == 2:
-            return cls(cuelist, cue, fields[1])
-        return cls(cuelist, cue, fields[1], float(fields[-1].strip("%")) / 100.0)
+        return cls(
+            cuelist=cuelist,
+            cue=cue,
+            label=" ".join(fields[1:-2]),
+            duration=Decimal(fields[-2]),
+            percentage=Decimal(fields[-1].strip("%")) / Decimal(100),
+        )
+
+    @classmethod
+    def from_nonactive_cue(cls, text: str):
+        """Parse cue data from OSC active cue status message."""
+        fields = text.split(" ")
+        cuelist = int(fields[0].split("/")[0])
+        cue = Decimal(fields[0].split("/")[1])
+
+        return cls(
+            cuelist=cuelist, cue=cue, label=" ".join(fields[1:-2]), duration=Decimal(fields[-1])
+        )
 
 
 @dataclass
@@ -383,7 +402,13 @@ class EosWheel:
         name = args[0].split("[")[0].strip()
         pretty_value = int(args[0].split("[")[1].replace("]", ""))
 
-        return cls(num, name, pretty_value, Decimal(args[2]), EosWheelCategory(int(args[1])))
+        return cls(
+            number=num,
+            name=name,
+            pretty_value=pretty_value,
+            value=Decimal(args[2]),
+            category=EosWheelCategory(int(args[1])),
+        )
 
 
 """

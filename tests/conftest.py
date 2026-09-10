@@ -1,11 +1,11 @@
 import pytest
 
-from eos import EosSLIP
+from eos import Eos
 
 
 @pytest.fixture(scope="session", autouse=True)
 def eos():
-    eos = EosSLIP("localhost", 3032)
+    eos = Eos.tcp_slip("localhost", 3032)
     yield eos
-    eos.live()
-    eos.clear_cmd_line()
+    eos.keys.live()
+    eos.keys.clear_cmd_line()

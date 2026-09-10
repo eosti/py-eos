@@ -41,11 +41,18 @@ lint.ignore = [
   "INP001",  # __init__ required in folders
   # 'G004',    # Logging statement uses f-string
   #     'PD901',   # Avoid using the generic variable name `df` for DataFrames
-  # 'D100',    # Missing docstring in public module
-  #     'D104',    # Missing docstring in public package
-  #     'D107',    # Missing docstring in `__init__`
-  #     'D400',    # First line should end with a period'
-  #     'D401',    # First line of docstring should be in imperative mood'
+   'D100',    # Missing docstring in public module
+       'D104',    # Missing docstring in public package
+       'D107',    # Missing docstring in `__init__`
+       'D400',    # First line should end with a period'
+       'D401',    # First line of docstring should be in imperative mood'
+       'D101',
+       'D102',
+       'D105',
+       'TD003',
+       'TD004',
+       'TD002',
+       'N802',
 ]
 lint.per-file-ignores."tests/*.py" = [
   "ANN",     # Typechecking

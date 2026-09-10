@@ -2,21 +2,22 @@
 
 import logging
 import sys
-import time
-from typing import Any, override
-
-from pythonosc.dispatcher import Dispatcher
-from pythonosc.osc_packet import OscPacket
-from pythonosc.osc_tcp_server import MODE_1_1
-from pythonosc.tcp_client import SimpleTCPClient
-from pythonosc.udp_client import SimpleUDPClient
+from typing import Any
 
 from eos.cues import EosCues
 from eos.groups import EosGroups
+from eos.helpers import EosCmdLineError, EosError, EosTargets
 from eos.iterator import (
     EosRefDataIterator,
 )
+from eos.keys import EosKeys
 from eos.macros import EosMacros
+from eos.osc import (
+    OscConnection,
+    PacketLengthTcpOscConnection,
+    SlipTcpOscConnection,
+    UdpOscConnection,
+)
 from eos.system import EosSystem
 
 logger = logging.getLogger(__name__)
@@ -28,126 +29,84 @@ class Eos(EosCues, EosSystem, EosGroups, EosMacros):
     EosBase is the parent of all mixins, so it is implicity inherited here.
     """
 
-    def __init__(self) -> None:
+    GENERIC_DELAY = 0.02
+
+    def __init__(self, osc: OscConnection) -> None:
         """Connect to Eos session."""
-        super().__init__()
+        self.osc = osc
+        self.keys = EosKeys(self)
+        self.cues = EosCues(self)
+        self.groups = EosGroups(self)
+        self.macros = EosMacros(self)
+        self.system = EosSystem(self)
+
         self.preset = EosRefDataIterator(self, "preset")
         self.ip = EosRefDataIterator(self, "ip")
         self.bp = EosRefDataIterator(self, "bp")
         self.fp = EosRefDataIterator(self, "fp")
         self.cp = EosRefDataIterator(self, "cp")
 
-        self.write(f"/eos/sc/Connected from {sys.argv[0]}")
+        self.osc.dispatcher.set_default_handler(self._unhandledMessageHandler)
+        try:
+            logger.info("Connected to Eos v%s", self.system.get_version())
+        except EosError as e:
+            raise RuntimeError("Unable to connect to Eos") from e
+        self.osc.write(f"/eos/sc/Connected from {sys.argv[0]}")
 
-        self.dispatcher.set_default_handler(self._unhandledMessageHandler)
+    def send_command(self, commandline: str) -> None:
+        """Send a full command to Eos."""
+        self.osc.write("/eos/newcmd", [commandline])
+        self.osc.handle_messages()
+        if self.system.cmd_line_error:
+            raise EosCmdLineError
 
-        logger.info("Connected to Eos v%s", self.get_version())
+    @classmethod
+    def tcp_packet_length(cls, ip: str, port: int) -> None:
+        osc = PacketLengthTcpOscConnection(ip=ip, port=port)
+        return cls(osc)
+
+    @classmethod
+    def tcp_slip(cls, ip: str, port: int) -> None:
+        osc = SlipTcpOscConnection(ip=ip, port=port)
+        return cls(osc)
+
+    @classmethod
+    def udp(cls, ip: str, rx_port: int, tx_port: int) -> None:
+        osc = UdpOscConnection(ip=ip, rx_port=rx_port, tx_port=tx_port)
+        return cls(osc)
 
     def _unhandledMessageHandler(self, addr: str, *args: list[Any]) -> None:
         """Hande messages that are not otherwise handled."""
         logger.debug("Unhandled message: %s, %s", addr, args)
 
+    def get_target_count(self, target: str, **kwargs: int) -> int:
+        """Get the number of targets of a particular type."""
+        if target not in EosTargets:
+            raise ValueError("Invalid target %s", target)
 
-class EosUDP(Eos):
-    """Eos connections over UDP."""
-
-    def __init__(self, ip: str, rx_port: int, tx_port: int) -> None:
-        """Connect to an Eos session over UDP.
-
-        Arguments:
-            ip: IP of Eos instance
-            rx_port: the RX port as described by Eos
-            tx_port: the TX port as described by Eos
-
-        """
-        self.ip_address = ip
-        self.rx_port = rx_port
-        self.tx_port = tx_port
-        self.dispatcher = Dispatcher()
-
-        # Doesn't seem to work?
-        self.server = BlockingOSCUDPServer((self.ip, self.tx_port), self.dispatcher)
-        self.client = SimpleUDPClient(self.ip, self.rx_port)
-
-        logger.info("Connected to %s (TX:%s, RX:%s)", self.ip_address, self.tx_port, self.rx_port)
-        # Confusion, client only takes one port?
-
-        super().__init__()
-
-    @override
-    def write(self, path: str, args: list[str] | None = None) -> None:
-        logger.debug(path)
-        if args is not None:
-            logger.warning("Seemingly don't support arguments for UDP??")
-        self.client.send_message(path)
-
-
-class EosTCP(Eos):
-    """Eos connections over TCP."""
-
-    def __init__(self, ip: str, port: int) -> None:
-        """Connect to an Eos session over TCP."""
-        self.ip_address = ip
-        self.port = port
-        self.dispatcher = Dispatcher()
-
-        if self.client is None:
-            # TODO(eosti): Implement mode detection # noqa: TD003
-            raise NotImplementedError("Mode detection TBD")
-
-        super().__init__()
-
-    @override
-    def write(self, path: str, args: list[str] | None = None) -> None:
-        if args is None:
-            logger.debug(path)
-            self.client.send_message(path)
+        if target == "cue":
+            if "cuelist" not in kwargs:
+                logger.warning("Cuelist not specified for target count; defaulting to 1")
+            query_str = f"get/cue/{kwargs.get('cuelist', 1)}/count"
         else:
-            logger.debug("%s %s", path, args)
-            self.client.send_message(path, args)
+            query_str = f"get/{target}/count"
 
-    @override
-    def read_next(self, timeout: int = 30) -> OscPacket:
-        msg = self.client.receive(timeout)
-        return OscPacket(msg)
+        target_count: int | None = None
 
-    @override
-    def handle_messages(self, timeout: float = 0.1, retries: int = 3) -> None:
-        count = 0
-        msg = self.client.receive(timeout)
-        while msg:
-            for i in msg:
-                self.dispatcher.call_handlers_for_packet(i, (self.ip_address, self.port))
-                count += 1
-            msg = self.client.receive(timeout)
-
-        if count == 0:
-            if retries == 0:
-                logger.warning("No messages received!")
+        def handler(_: str, *args: list[Any]) -> None:
+            nonlocal target_count
+            if isinstance(args[0], int):
+                target_count = args[0]
             else:
-                time.sleep(self.GENERIC_DELAY)
-                self.handle_messages(timeout, retries - 1)
-        else:
-            logger.debug("Processed %i messages", count)
+                logger.warning("Uncertain target count conversion %s", args[0])
+                target_count = int(args[0])
 
+        osc_filter = self.osc.dispatcher.map(f"/eos/out/{query_str}", handler)
+        self.osc.write(f"/eos/{query_str}")
+        self.osc.handle_messages()
 
-class EosPacketLength(EosTCP):
-    """Eos connections over TCP v1.0 Packet Length."""
+        if target_count is None:
+            raise EosError(f"Unable to get number of targets for {target}")
 
-    def __init__(self, ip: str, port: int) -> None:
-        """Connect to an Eos session over TCP v1.0."""
-        self.client = SimpleTCPClient(ip, port)
-        logger.info("Connected to %s:%s (TCP v1.0 Packet Length)", self.ip_address, self.port)
-
-        super().__init__(ip, port)
-
-
-class EosSLIP(EosTCP):
-    """Eos connections over TCP v1.1 SLIP."""
-
-    def __init__(self, ip: str, port: int) -> None:
-        """Connect to an Eos session over TCP v1.1."""
-        self.client = SimpleTCPClient(ip, port, mode=MODE_1_1)
-        logger.info("Connected to %s:%s (TCP v1.1 SLIP)", ip, port)
-
-        super().__init__(ip, port)
+        self.osc.dispatcher.unmap(f"/eos/out/{query_str}", osc_filter)
+        return target_count
