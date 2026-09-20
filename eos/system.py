@@ -71,7 +71,7 @@ class EosSystem:
         except EosTimeoutError as e:
             raise EosError("No ping response received") from e
 
-        if resp[0][1] != message:
+        if resp[0].args[0] != message:
             logger.debug(resp)
             raise EosError("Ping doesn't match pong")
 
@@ -91,7 +91,7 @@ class EosSystem:
         except EosTimeoutError as e:
             raise EosError("No version data received") from e
 
-        version = resp[0][0]
+        version = resp[0].args[0]
         return str(version)
 
     def _updateUserHandler(self, _addr: str, *args: list[Any]) -> None:
