@@ -2,7 +2,7 @@
 
 import itertools
 from abc import ABC
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import IntEnum
@@ -30,15 +30,16 @@ class EosCmdLineError(EosError):
 class EosChanSelection:
     """Stores ranges as individual channels."""
 
-    def __init__(self, chans: Sequence[Decimal | str]) -> None:
+    def __init__(self, chans: Sequence[int | Decimal | str]) -> None:
         """Create a new channel selection from list of individual channels."""
         dec_chans = [Decimal(x) for x in chans]
-        self.chans: set[Decimal] = sorted(set(dec_chans))
+        self.chans: list[Decimal] = sorted(set(dec_chans))
 
     def __repr__(self) -> str:
-        return str(self.chans)
+        str_chans = [str(x) for x in self.chans]
+        return str(str_chans)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Decimal]:
         yield from self.chans
 
     def __eq__(self, other):
@@ -50,7 +51,7 @@ class EosChanSelection:
         return hash(self.chans)
 
     @classmethod
-    def from_eos_arg(cls, eos_arg: list[Any]):
+    def from_eos_arg(cls, eos_arg: list[Any]) -> Self:
         """Generate a Eos channel selection from an Eos range.
 
         ex. "1-4 7 9 12-24"
@@ -71,7 +72,7 @@ class EosChanSelection:
         return cls(sorted(chan_list))
 
     @classmethod
-    def from_active_chans(cls, active_chans: str):
+    def from_active_chans(cls, active_chans: str) -> Self:
         """Generate an Eos channel selection from the Eos active channels."""
         split_str = active_chans.split(",")
         chan_list = []
@@ -87,10 +88,10 @@ class EosChanSelection:
         """Convert a list of channels to a list of tuples with inclusive ranges."""
         sorted_chans = sorted(set(self.chans))
 
-        def ranges(i):
+        def ranges(i: list) -> Iterator[tuple[Decimal, Decimal]]:
             for _key, group in itertools.groupby(enumerate(i), lambda t: t[1] - t[0]):
-                group = list(group)
-                yield group[0][1], group[-1][1]
+                group_list = list(group)
+                yield group_list[0][1], group_list[-1][1]
 
         return list(ranges(sorted_chans))
 
@@ -114,13 +115,7 @@ class EosChanSelection:
         command = ""
         ranges = self.to_ranges()
         for idx, val in enumerate(ranges):
-            if val[0] == val[1]:
-                # Single value
-                chanstr = str(val[0])
-            else:
-                # Range
-                chanstr = f"{val[0]} Thru {val[1]}"
-
+            chanstr = str(val[0]) if val[0] == val[1] else f"{val[0]} Thru {val[1]}"
             if idx < len(ranges) - 1:
                 # Not the last channel
                 chanstr += " +"

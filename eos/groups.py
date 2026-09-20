@@ -8,7 +8,6 @@ from eos.helpers import (
     EosChanSelection,
     EosCmdLineError,
     EosError,
-    EosTab,
     GroupProperties,
 )
 from eos.iterator import EosGroupIterator
@@ -21,48 +20,43 @@ class EosGroups(EosGroupIterator):
 
     def _create(
         self,
-        group_num: Decimal,
+        group_num: int | Decimal,
         chans: EosChanSelection,
         label: str | None = None,
     ) -> None:
         """Create a new group without presence checks."""
-        logger.info("Creating new group %g", group_num)
-        self.eos.send_command(f"Group {group_num} #")
         if label is not None:
-            self.eos.send_command(f"Group {group_num} Label {label} #")
-        self.eos.send_command(chans.eos_command() + " #")
+            self.eos.send_command(f"{chans.eos_command()} Record Group {group_num} Label {label}#")
+        else:
+            self.eos.send_command(f"{chans.eos_command()} Record Group {group_num} #")
 
-    def update(
+    def edit_chans(
         self,
         existing_group: GroupProperties,
-        group_num: Decimal,
         chans: Sequence | EosChanSelection,
-        label: str | None = None,
-    ) -> None:
-        """Update an existing group with new properties."""
+    ) -> GroupProperties:
+        """Replace an existing group selection with new channels."""
         if not isinstance(chans, EosChanSelection):
             chans = EosChanSelection(chans)
-        if existing_group.label != label:
-            logger.info("Updating group %f label to %s", group_num, label)
-            self.eos.send_command(f"Group {group_num} Label {label} #")
-        if existing_group.chans != chans:
-            logger.info(
-                "Updating group %f channels to %s (was %s)", group_num, chans, existing_group.chans
-            )
-            self.eos.send_command(f"Group {group_num} #")
-            self.eos.send_command(chans.eos_command() + " # #")
+
+        grp = self.get_by_uid(existing_group.uid)
+
+        if grp.chans != chans:
+            logger.debug("Updating group %f channels to %s (was %s)", grp.number, chans, grp.chans)
+            self.eos.send_command(f"{chans.eos_command()} Record Group {grp.number} # #")
+
+        return self.get_by_uid(grp.uid)
 
     def record(
         self,
-        group_num: Decimal,
+        group_num: int | Decimal,
         chans: Sequence | EosChanSelection,
         label: str | None = None,
-    ) -> None:
+    ) -> GroupProperties:
         """Record a group."""
         if not isinstance(chans, EosChanSelection):
             chans = EosChanSelection(chans)
 
-        self.eos.keys.open_tab(EosTab.GROUPS)
         try:
             self.get(group_num)
         except EosError:
@@ -70,25 +64,9 @@ class EosGroups(EosGroupIterator):
         else:
             raise EosError("Group already exists!")
 
-    def record_overwrite(
-        self,
-        group_num: Decimal,
-        chans: Sequence | EosChanSelection,
-        label: str | None = None,
-    ) -> None:
-        """Records a group even if the group already exists."""
-        if not isinstance(chans, EosChanSelection):
-            chans = EosChanSelection(chans)
+        return self.get(group_num)
 
-        self.eos.keys.open_tab(EosTab.GROUPS)
-        try:
-            grp = self.get(group_num)
-        except EosError:
-            self._create(group_num, chans, label)
-        else:
-            self.update(grp, group_num, chans, label)
-
-    def delete(self, group_num: Decimal) -> None:
+    def delete(self, group_num: int | Decimal) -> None:
         """Delete a group."""
         self.eos.send_command(f"Delete Group {group_num} # #")
         self.eos.osc.handle_messages()

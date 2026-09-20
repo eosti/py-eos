@@ -1,7 +1,11 @@
+import logging
+import time
 from typing import Any
 
-from eos.helpers import EosError
+from eos.helpers import EosError, EosTimeoutError
 from eos.osc import OscConnection
+
+logger = logging.getLogger(__name__)
 
 
 class Transaction:
@@ -27,14 +31,23 @@ class Transaction:
     def _resp_handler(self, addr: str, *args: list[Any]) -> None:
         self.resp.append((addr, args))
 
-    def query(self, timeout: float = 0.1) -> list[tuple[str, Any]]:
+    def query(self, timeout: float = 0.2) -> list[tuple[str, Any]]:
         osc_filter = self.osc.dispatcher.map(self.resp_filter, self._resp_handler)
         self.send()
-        # Do I need to add a delay here? or otherwise keep querying?
-        self.osc.handle_messages(timeout=timeout)
+
+        start_time = time.perf_counter()
+        while len(self.resp) < self.num_resps:
+            self.osc.handle_messages(timeout=timeout / 10)
+            if time.perf_counter() - start_time > timeout:
+                raise EosTimeoutError(
+                    f"Didn't receive all data for query {self.query_path} (got {len(self.resp)})"
+                )
+
         self.osc.dispatcher.unmap(self.resp_filter, osc_filter)
 
-        if len(self.resp) < self.num_resps:
+        if len(self.resp) != self.num_resps:
+            logger.debug(self.resp)
+
             raise EosError(
                 f"Didn't receive all data for query {self.query_path} (got {len(self.resp)}, expected {self.num_resps})"
             )

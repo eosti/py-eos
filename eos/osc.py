@@ -1,5 +1,4 @@
 import logging
-import time
 from abc import ABC, abstractmethod
 from typing import override
 
@@ -46,7 +45,7 @@ class UdpOscConnection(OscConnection):
         self.rx_port = rx_port
         self.tx_port = tx_port
         self.generic_delay = generic_delay
-        self.dispatcher = Dispatcher()
+        self._dispatcher = Dispatcher()
 
         # Doesn't seem to work?
         # but I need to use two ports in Eos?
@@ -63,7 +62,7 @@ class UdpOscConnection(OscConnection):
         logger.debug(path)
         if args is not None:
             logger.warning("Seemingly don't support arguments for UDP??")
-        self.client.send_message(path)
+        self.client.send_message(path, args)
 
 
 class TcpOscConnection(OscConnection):
@@ -100,21 +99,13 @@ class TcpOscConnection(OscConnection):
     @override
     def handle_messages(self, timeout: float = 0.1, retries: int = 3) -> None:
         count = 0
+
         msg = self.client.receive(timeout)
         while msg:
             for i in msg:
                 self.dispatcher.call_handlers_for_packet(i, (self.ip_address, self.port))
                 count += 1
             msg = self.client.receive(timeout)
-
-        if count == 0:
-            if retries == 0:
-                logger.warning("No messages received!")
-            else:
-                time.sleep(self.generic_delay)
-                self.handle_messages(timeout, retries - 1)
-        else:
-            logger.debug("Processed %i messages", count)
 
 
 class PacketLengthTcpOscConnection(TcpOscConnection):

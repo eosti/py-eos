@@ -1,7 +1,6 @@
 """OSC synch and subscription functionality."""
 
 import logging
-import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from decimal import Decimal
@@ -48,7 +47,7 @@ class EosIterator[T](ABC):
         logger.debug("Got %i of %s", cnt, self.target)
         return cnt
 
-    def get(self, num: Decimal) -> T:
+    def get(self, num: int | Decimal) -> T:
         """Get a target from the Eos number."""
         query_str = f"get/{self.target}/{num}"
         return self._getQuery(query_str)
@@ -63,9 +62,15 @@ class EosIterator[T](ABC):
         query_str = f"get/{self.target}/uid/{uid}"
         return self._getQuery(query_str)
 
-    def label(self, num: Decimal, label: str) -> None:
-        """Label a target."""
-        self.eos.osc.write(f"/eos/set/{self.target}/{num}/label='{label}'")
+    def label(self, num: Decimal | int, label: str) -> None:
+        """Label a target.
+
+        This function returns immediately, before the label may have applied.
+        Avoid `get`ting a target immediately after labelling, or use a GENERIC_DELAY
+            before `get`ting to ensure sync.
+        """
+        self.get(num)
+        self.eos.osc.write(f"/eos/set/{self.target}/{num}/label", args=[label])
 
     @abstractmethod
     def _handle_response(self, resp: list[tuple[str, Any]]) -> T:
@@ -80,6 +85,7 @@ class EosIterator[T](ABC):
             resp_filter=f"/eos/out/get/{self.target}/*",
             num_resps=EosTargets[self.target],
         ).query()
+
         return self._handle_response(resp)
 
     def _genericChanParser(self, _: str, args: list[Any]) -> EosChanSelection:
@@ -276,7 +282,6 @@ class EosCueListIterator(EosIterator[CueListProperties]):
             raise EosError(f"{self.target.capitalize()} {number} does not exist!") from e
 
 
-# TODO: fill in the stuff that used to be inherited from the EosIterator once transactions exist
 class EosCueIterator:
     """Iterator class for cues.
 
@@ -306,8 +311,8 @@ class EosCueIterator:
             osc_conn=self.eos.osc,
             query_path=f"/eos/{query_str}",
             query_data=None,
-            resp_filter=f"/eos/out/get/{self.target}/*",
-            num_resps=EosTargets[self.target],
+            resp_filter="/eos/out/get/cue/*",
+            num_resps=EosTargets["cue"],
         ).query()
         return self._handle_response(resp)
 
@@ -333,17 +338,7 @@ class EosCueIterator:
     def get_cue(self, cue: Cue, retry: int = 4) -> CueProperties:
         """Get a cue with explicit cue list/cue number/part number."""
         query_str = f"get/cue/{cue.cuelist}/{cue.cue:g}/{cue.part}"
-        # TODO(eosti): kinda a hack, not sure if other targets have such a variable response time.
-        try:
-            ret = self._getQuery(query_str)
-        except EosError:
-            if retry != 0:
-                time.sleep(self.eos.GENERIC_DELAY)
-                ret = self.get_cue(cue, retry - 1)
-            else:
-                raise
-
-        return ret
+        return self._getQuery(query_str)
 
     def get_by_uid(self, uid: str) -> CueProperties:
         """Get a target from its UID."""

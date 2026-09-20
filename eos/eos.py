@@ -2,7 +2,7 @@
 
 import logging
 import sys
-from typing import Any
+from typing import Any, Self
 
 from eos.cues import EosCues
 from eos.groups import EosGroups
@@ -19,11 +19,12 @@ from eos.osc import (
     UdpOscConnection,
 )
 from eos.system import EosSystem
+from eos.transaction import Transaction
 
 logger = logging.getLogger(__name__)
 
 
-class Eos(EosCues, EosSystem, EosGroups, EosMacros):
+class Eos:
     """Generic Eos class.
 
     EosBase is the parent of all mixins, so it is implicity inherited here.
@@ -55,23 +56,30 @@ class Eos(EosCues, EosSystem, EosGroups, EosMacros):
 
     def send_command(self, commandline: str) -> None:
         """Send a full command to Eos."""
-        self.osc.write("/eos/newcmd", [commandline])
-        self.osc.handle_messages()
+        Transaction(
+            self.osc,
+            query_path="/eos/newcmd",
+            query_data=[commandline],
+            resp_filter="/eos/out/cmd",
+            num_resps=1,
+        ).query()
+
         if self.system.cmd_line_error:
+            self.keys.clear_cmd_line()
             raise EosCmdLineError
 
     @classmethod
-    def tcp_packet_length(cls, ip: str, port: int) -> None:
+    def tcp_packet_length(cls, ip: str, port: int) -> Self:
         osc = PacketLengthTcpOscConnection(ip=ip, port=port)
         return cls(osc)
 
     @classmethod
-    def tcp_slip(cls, ip: str, port: int) -> None:
+    def tcp_slip(cls, ip: str, port: int) -> Self:
         osc = SlipTcpOscConnection(ip=ip, port=port)
         return cls(osc)
 
     @classmethod
-    def udp(cls, ip: str, rx_port: int, tx_port: int) -> None:
+    def udp(cls, ip: str, rx_port: int, tx_port: int) -> Self:
         osc = UdpOscConnection(ip=ip, rx_port=rx_port, tx_port=tx_port)
         return cls(osc)
 

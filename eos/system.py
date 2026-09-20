@@ -8,7 +8,8 @@ if TYPE_CHECKING:
     from eos.eos import Eos
 
 
-from eos.helpers import EosActiveChannel, EosError, EosState, EosWheel
+from eos.helpers import EosActiveChannel, EosError, EosState, EosTimeoutError, EosWheel
+from eos.transaction import Transaction
 
 logger = logging.getLogger(__name__)
 
@@ -59,44 +60,39 @@ class EosSystem:
             EosError if no ping back received.
 
         """
-        ping_flag = False
+        try:
+            resp = Transaction(
+                osc_conn=self.eos.osc,
+                query_path="/eos/ping",
+                query_data=[message],
+                resp_filter="/eos/out/ping",
+                num_resps=1,
+            ).query()
+        except EosTimeoutError as e:
+            raise EosError("No ping response received") from e
 
-        def handler(_addr: str, *args: list[Any]) -> None:
-            nonlocal ping_flag
-            logger.info("Pong!")
-            if args[0] != message:
-                logger.debug(args)
-                raise EosError("Ping doesn't match pong")
-            ping_flag = True
-
-        self.eos.osc.write("/eos/ping", message)
-        osc_filter = self.eos.osc.dispatcher.map("/eos/out/ping", handler)
-        self.eos.osc.handle_messages()
-        if ping_flag is False:
-            raise EosError("No ping response received")
-
-        self.eos.osc.dispatcher.unmap("/eos/out/ping", osc_filter)
+        if resp[0][1] != message:
+            logger.debug(resp)
+            raise EosError("Ping doesn't match pong")
 
     def get_version(self) -> str:
         """Gets Eos's current version.
 
         Returns: current Eos version.
         """
-        version = None
+        try:
+            resp = Transaction(
+                osc_conn=self.eos.osc,
+                query_path="/eos/get/version",
+                query_data=None,
+                resp_filter="/eos/out/get/version",
+                num_resps=1,
+            ).query()
+        except EosTimeoutError as e:
+            raise EosError("No version data received") from e
 
-        def handler(_addr: str, *args: list[any]) -> None:
-            # Ignores fixture library version
-            nonlocal version
-            version = args[0]
-
-        self.eos.osc.write("/eos/get/version")
-        osc_filter = self.eos.osc.dispatcher.map("/eos/out/get/version", handler)
-        self.eos.osc.handle_messages()
-        if version is None:
-            raise EosError("Did not receive version data")
-
-        self.eos.osc.dispatcher.unmap("/eos/out/get/version", osc_filter)
-        return version
+        version = resp[0][0]
+        return str(version)
 
     def _updateUserHandler(self, _addr: str, *args: list[Any]) -> None:
         self.user_id = int(args[0])
