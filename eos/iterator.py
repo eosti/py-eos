@@ -42,10 +42,29 @@ class EosIterator[T](ABC):
             yield self.get_by_idx(i)
 
     def count(self) -> int:
-        """Get count/max index of target."""
-        cnt = self.eos.get_target_count(self.target)
-        logger.debug("Got %i of %s", cnt, self.target)
-        return cnt
+        """Get the number of targets of a particular type."""
+        if self.target == "cue":
+            raise NotImplementedError
+
+        query_str = f"get/{self.target}/count"
+
+        resp = Transaction(
+                osc_conn=self.eos.osc,
+                query_path=f"/eos/get/{self.target}/count",
+                query_data=None,
+                resp_filter=f"/eos/out/get/{self.target}/count",
+                num_resps=1
+            ).query()
+
+        if not isinstance(resp[0].args[0], int):
+            logger.warning("Uncertain target count conversion %s", resp[0].args[0])
+            target_count = int(resp[0].args[0])
+        else:
+            target_count = resp[0].args[0]
+
+        logger.debug("Got %i of %s", target_count, self.target)
+        return target_count
+
 
     def get(self, num: int | Decimal) -> T:
         """Get a target from the Eos number."""
@@ -320,12 +339,24 @@ class EosCueIterator:
         if cuelist is None:
             if self.cuelist is None:
                 raise ValueError("No cuelist defined")
-            cnt = self.eos.get_target_count("cue", cuelist=self.cuelist)
-        else:
-            cnt = self.eos.get_target_count("cue", cuelist=cuelist)
+            cuelist = self.cuelist
 
-        logger.debug("Got %i of cues", cnt)
-        return cnt
+        resp = Transaction(
+                osc_conn=self.eos.osc,
+                query_path=f"/eos/get/cue/{cuelist}/count",
+                query_data=None,
+                resp_filter=f"/eos/out/get/cue/{cuelist}/count",
+                num_resps=1
+            ).query()
+
+        if not isinstance(resp[0].args[0], int):
+            logger.warning("Uncertain target count conversion %s", resp[0].args[0])
+            target_count = int(resp[0].args[0])
+        else:
+            target_count = resp[0].args[0]
+
+        logger.debug("Got %i of cues", target_count)
+        return target_count
 
     def get(self, cue: Decimal) -> CueProperties:
         """Get a cue from a cuelist by number.

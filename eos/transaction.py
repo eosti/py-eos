@@ -39,17 +39,18 @@ class Transaction:
 
     def query(self, timeout: float = 0.2) -> list[OscResponse]:
         osc_filter = self.osc.dispatcher.map(self.resp_filter, self._resp_handler)
-        self.send()
+        try:
+            self.send()
 
-        start_time = time.perf_counter()
-        while len(self.resp) < self.num_resps:
-            self.osc.handle_messages(timeout=timeout / 10)
-            if time.perf_counter() - start_time > timeout:
-                raise EosTimeoutError(
-                    f"Didn't receive all data for query {self.query_path} (got {len(self.resp)})"
-                )
-
-        self.osc.dispatcher.unmap(self.resp_filter, osc_filter)
+            start_time = time.perf_counter()
+            while len(self.resp) < self.num_resps:
+                self.osc.handle_messages(timeout=timeout / 10)
+                if time.perf_counter() - start_time > timeout:
+                    raise EosTimeoutError(
+                        f"Didn't receive all data for query {self.query_path} (got {len(self.resp)})"
+                    )
+        finally:
+            self.osc.dispatcher.unmap(self.resp_filter, osc_filter)
 
         if len(self.resp) != self.num_resps:
             logger.debug(self.resp)

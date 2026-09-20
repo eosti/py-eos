@@ -1,4 +1,5 @@
 import logging
+import time
 from abc import ABC, abstractmethod
 from typing import override
 
@@ -98,14 +99,18 @@ class TcpOscConnection(OscConnection):
 
     @override
     def handle_messages(self, timeout: float = 0.1, retries: int = 3) -> None:
-        count = 0
+        msgs = []
 
+        start_time = time.perf_counter()
         msg = self.client.receive(timeout)
         while msg:
             for i in msg:
                 self.dispatcher.call_handlers_for_packet(i, (self.ip_address, self.port))
-                count += 1
-            msg = self.client.receive(timeout)
+
+            time_left = timeout - (time.perf_counter() - start_time)
+            if time_left < 0:
+                break
+            msg = self.client.receive(time_left)
 
 
 class PacketLengthTcpOscConnection(TcpOscConnection):
