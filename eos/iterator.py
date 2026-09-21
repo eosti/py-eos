@@ -393,8 +393,8 @@ class EosCueIterator:
 
     def _handle_response(self, resp: list[OscResponse]) -> CueProperties:
         cue: CueProperties | None = None
-        fx: list | None = None
-        links: list[Cue] | None = None
+        fx: list[str] | None = None
+        links: list[str] | None = None
         actions: list[str] | None = None
 
         for r in resp:
@@ -428,7 +428,7 @@ class EosCueIterator:
             logger.exception(resp.args)
             raise EosError(f"Cue {cuelist}/{cue} Part {cuepart} does not exist!") from e
 
-    def _cueFXParser(self, resp: OscResponse) -> list | None:
+    def _cueFXParser(self, resp: OscResponse) -> list[str] | None:
         """Parse the FX present in a cue."""
         if len(resp.args) <= 2:
             # No links
@@ -436,13 +436,13 @@ class EosCueIterator:
 
         return resp.args[2:]
 
-    def _cueLinksParser(self, resp: OscResponse) -> list[Cue] | None:
+    def _cueLinksParser(self, resp: OscResponse) -> list[str] | None:
         """Parse the links present in a cue."""
         if len(resp.args) <= 2:
             # No links
             return None
 
-        return [Cue.from_text(q) for q in resp.args[2:]]
+        return resp.args[2:]
 
 
     def _cueActionsParser(self, resp: OscResponse) -> list[str] | None:
