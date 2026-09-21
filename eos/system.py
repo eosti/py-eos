@@ -24,9 +24,9 @@ class EosSystem:
         self.softkeys: list[str | None] = [None] * 12
         self.user_cmd_line: dict[int, tuple[str, str, bool]] = {}
 
-        self.hs: tuple(float, float)
-        self.pantilt: tuple(float, float)
-        self.xyz: tuple(float, float, float)
+        self.hs: tuple[float, float]
+        self.pantilt: tuple[float, float]
+        self.xyz: tuple[float, float, float]
         self.user_id: int
         self.show_name: str
         self.eos_state: EosState
@@ -155,8 +155,8 @@ class EosSystem:
     def _updateCmdHandler(self, _addr: str, *args: list[Any]) -> None:
         combined_cmd = "".join(args[:-1])
         self.display_mode = combined_cmd.split(":")[0]
-        self.cmd_line = combined_cmd.split(":", 2)[2]
         self.cmd_line_error = bool(args[-1])
+        self.cmd_line = combined_cmd.split(":", 2)[-1]
 
         if self.cmd_line_error:
             logger.debug("%s: %s (ERROR)", self.display_mode, self.cmd_line)

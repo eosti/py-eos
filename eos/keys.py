@@ -12,6 +12,10 @@ logger = logging.getLogger(__name__)
 
 
 class EosKeys:
+    """
+    Please see https://www.etcconnect.com/WebDocs/Controls/EosFamilyOnlineHelp/en/Content/23_Show_Control/08_OSC/OSC_Dictionary.htm#Keys
+        for valid keys
+    """
     def __init__(self, eos: "Eos", generic_delay: float = 0) -> None:
         self.eos = eos
         self._write = self.eos.osc.write
@@ -57,3 +61,9 @@ class EosKeys:
 
     def go_to_cue(self, cue: Cue, time_s: int | Decimal = 0) -> None:
         self.eos.send_command(f"Go_To_Cue {cue.cue_format()} Time {time_s} #")
+
+    def go_to_cue_zero(self, time_s: int | Decimal = 0) -> None:
+        self.eos.send_command(f"Go_To_Cue 0 Time {time_s} #")
+
+    def go_to_cue_out(self, time_s: int | Decimal = 0) -> None:
+        self.eos.send_command(f"Go_To_Cue Out Time {time_s} #")

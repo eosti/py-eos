@@ -3,11 +3,12 @@
 import logging
 import time
 from typing import TYPE_CHECKING, Any
+from decimal import Decimal
 
 if TYPE_CHECKING:
     from eos.eos import Eos
 
-from eos.helpers import Cue, EosError
+from eos.helpers import Cue, CueProperties, EosError, EosState, EosCmdLineError
 from eos.iterator import EosCueIterator
 
 logger = logging.getLogger(__name__)
@@ -61,55 +62,74 @@ class EosCues(EosCueIterator):
             # Redundant info, skip it
             pass
 
-    def record(self, cue: Cue) -> None:
+    def record(self, cue: Cue) -> CueProperties:
         """Record a cue."""
-        self.eos.keys.blind()
         if cue.part != 0:
             raise ValueError("cue must have part zero")
-        try:
-            self.iterator.get_cue(cue)
-        except EosError:
-            self._send_command(f"Cue {cue.cue_format()} # #")
-            time.sleep(self.eos.GENERIC_DELAY)
-        # Otherwise, cue already exists!
 
-    def record_part(self, cue: Cue, part: int) -> Cue:
+        try:
+            self.get_cue(cue)
+        except EosError:
+            pass
+        else:
+            raise EosError("Cue already exists")
+
+        if self.eos.system.eos_state == EosState.BLIND:
+            self._send_command(f"Cue {cue.cue_format()} # #")
+        elif self.eos.system.eos_state == EosState.LIVE:
+            self._send_command(f"Record Cue {cue.cue_format()} #")
+
+        return self.get_cue(cue)
+
+    def record_part(self, cue: Cue, part: int | None = None) -> CueProperties:
         """Record a part of a cue."""
-        # TODO(eosti): how to do this not in blind too, or at least restore state?
-        self.eos.keys.blind()
-        cue.part = part
-        try:
-            self.iterator.get_cue(cue)
-        except EosError:
-            self._send_command(f"Cue {cue.cue_format()} # #")
-            time.sleep(0.05)
+        if part is not None:
+            cue.part = part
 
-        return cue
+        try:
+            self.get_cue(cue)
+        except EosError:
+            pass
+        else:
+            raise EosError("Cue part already exists")
+
+        if self.eos.system.eos_state == EosState.BLIND:
+            self._send_command(f"Cue {cue.cue_format()} # #")
+        elif self.eos.system.eos_state == EosState.LIVE:
+            self._send_command(f"Record Cue {cue.cue_format()} #")
+
+        return self.get_cue(cue)
+
+    def delete(self, cue: Cue) -> None:
+        self._send_command(f"Delete Cue {cue.cue_format()} # #")
+        if self.eos.system.cmd_line_error:
+            raise EosCmdLineError(f"Cue {cue} does not exist")
+
 
     def intensity_block(self, cue: Cue) -> None:
         """Give a cue an Intensity Block flag."""
-        props = self.iterator.get_cue(cue)
+        props = self.get_cue(cue)
         if "I" in props.blockstr:
             return
         self._send_command(f"Cue {cue.cue_format()} Intensity Block #")
 
     def block(self, cue: Cue) -> None:
         """Give a cue a Block flag."""
-        props = self.iterator.get_cue(cue)
+        props = self.get_cue(cue)
         if "B" in props.blockstr:
             return
         self._send_command(f"Cue {cue.cue_format()} Block #")
 
     def assert_flag(self, cue: Cue) -> None:
         """Give a cue an Assert flag."""
-        props = self.iterator.get_cue(cue)
+        props = self.get_cue(cue)
         if "A" in props.assertstr:
             return
         self._send_command(f"Cue {cue.cue_format()} Assert #")
 
     def mark(self, cue: Cue) -> None:
         """Give a cue a normal-priority mark attribute."""
-        props = self.iterator.get_cue(cue)
+        props = self.get_cue(cue)
         if "M" in props.markstr or "m" in props.markstr:
             return
         self._send_command(f"Cue {cue.cue_format()} Mark #")
@@ -117,34 +137,55 @@ class EosCues(EosCueIterator):
     def mark_high(self, cue: Cue) -> None:
         """Give a cue a high-priority mark attribute."""
         # TODO(eosti): check if "Mark" is in softkeys to see if Automark on
-        props = self.iterator.get_cue(cue)
+        props = self.get_cue(cue)
         if "Mh" in props.markstr or "mh" in props.markstr:
             return
         self._send_command(f"Cue {cue.cue_format()} Mark High_Priority #")
 
     def mark_low(self, cue: Cue) -> None:
         """Give a cue a low-priority mark attribute."""
-        props = self.iterator.get_cue(cue)
+        props = self.get_cue(cue)
         if "Ml" in props.markstr or "ml" in props.markstr:
             return
         self._send_command(f"Cue {cue.cue_format()} Mark Low_Priority #")
 
     def label(self, cue: Cue, label: str) -> None:
         """Label a cue."""
-        props = self.iterator.get_cue(cue)
-        if props.label != label:
-            logger.info("Updating cue %s label from %s to %s", cue.cue_format(), props.label, label)
-            self._send_command(f"Cue {cue.cue_format()} Label {label}")
-            self.eos.keys.enter()
+        self._send_command(f"Cue {cue.cue_format()} Label {label} #")
 
-    def set_time(self, cue: Cue, cuetime: float) -> None:
+    def set_time(self, cue: Cue, uptime: Decimal | int, downtime: Decimal | int | None = None) -> None:
         """Set the time of a cue (i.e. intensity up if other values already set)."""
-        self._send_command(f"Cue {cue.cue_format()} Time {cuetime} #")
+        if downtime is None:
+            self._send_command(f"Cue {cue.cue_format()} Time {uptime} #")
+        else:
+            self._send_command(f"Cue {cue.cue_format()} Time {uptime} / {downtime} #")
 
     def add_scene(self, cue: Cue, scene: str) -> None:
         """Add a scene attribute to a cue."""
-        props = self.iterator.get_cue(cue)
+        props = self.get_cue(cue)
         if props.scene not in ("", scene):
             logger.warning("Renaming scene on %s (%s)", cue.cue_format(), props.scene)
         self._send_command(f"Cue {cue.cue_format()} Scene {scene}")
         self.eos.keys.enter()
+
+    def link_cue(self, src_cue: Cue, dest_cue: Cue) -> None:
+        if dest_cue.part != 0:
+            raise ValueError("Unable to link to cue part")
+        try:
+            self._send_command(f"Cue {src_cue.cue_format()} Link {dest_cue.cue_format()} #")
+        except EosCmdLineError as e:
+            raise EosCmdLineError("Destination cue does not exist") from e
+
+    def execute_cue(self, src_cue: Cue, dest_cue: Cue) -> None:
+        if dest_cue.part != 0:
+            raise ValueError("Unable to link to cue part")
+        try:
+            self._send_command(f"Cue {src_cue.cue_format()} Execute Cue {dest_cue.cue_format()} #")
+        except EosCmdLineError as e:
+            raise EosCmdLineError("Destination cue does not exist") from e
+
+    def execute_macro(self, src_cue: Cue, macro: int | Decimal) -> None:
+        try:
+            self._send_command(f"Cue {src_cue.cue_format()} Execute Macro {macro} #")
+        except EosCmdLineError as e:
+            raise EosCmdLineError("Target macro does not exist") from e

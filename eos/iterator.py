@@ -17,6 +17,7 @@ from eos.helpers import (
     CueProperties,
     EosChanSelection,
     EosError,
+    EosParsingError,
     EosTargets,
     GroupProperties,
     MacroProperties,
@@ -114,11 +115,12 @@ class EosIterator[T](ABC):
 
         return EosChanSelection.from_eos_arg(resp.args[2:])
 
-    def _genericLinksParser(self, resp: OscResponse) -> str:
+    def _genericLinksParser(self, resp: OscResponse) -> list[str] | None:
         """Generic parser for arguments that contain a list of links."""
-        logger.error("...I didn't think we'd get this far!")
-        logger.info(resp)
-        return ""
+        if len(resp.args) <= 2:
+            return None
+
+        return resp.args[2:]
 
 
 class EosRefDataIterator(EosIterator[RefDataProperties]):
@@ -180,9 +182,7 @@ class EosRefDataIterator(EosIterator[RefDataProperties]):
         if len(resp.args) <= 2:
             return None
 
-        logger.warning("No logic to parse fx!")
-        logger.info(resp.args)
-        return None
+        return resp.args[2:]
 
 
 class EosGroupIterator(EosIterator[GroupProperties]):
@@ -363,10 +363,13 @@ class EosCueIterator:
 
         Probably won't handle parts gracefully.
         """
-        query_str = f"get/cue/{self.cuelist}/{cue}"
-        return self._getQuery(query_str)
+        if self.cuelist is None:
+            raise ValueError("No default cuelist set")
 
-    def get_cue(self, cue: Cue, retry: int = 4) -> CueProperties:
+        full_cue = Cue(self.cuelist, cue)
+        return self.get_cue(full_cue)
+
+    def get_cue(self, cue: Cue) -> CueProperties:
         """Get a cue with explicit cue list/cue number/part number."""
         query_str = f"get/cue/{cue.cuelist}/{cue.cue:g}/{cue.part}"
         return self._getQuery(query_str)
@@ -391,8 +394,8 @@ class EosCueIterator:
     def _handle_response(self, resp: list[OscResponse]) -> CueProperties:
         cue: CueProperties | None = None
         fx: list | None = None
-        links: list | None = None
-        actions: list | None = None
+        links: list[Cue] | None = None
+        actions: list[str] | None = None
 
         for r in resp:
             if "fx" in r.addr:
@@ -406,7 +409,7 @@ class EosCueIterator:
                 cue = self._cueInfoParser(r)
 
         if cue is None:
-            raise EosError("Not all data present for cue")
+            raise EosParsingError("Not all data present for cue")
 
         cue.fx = fx
         cue.links = links
@@ -431,23 +434,21 @@ class EosCueIterator:
             # No links
             return None
 
-        logger.warning("No logic to parse FX")
-        return None
+        return resp.args[2:]
 
-    def _cueLinksParser(self, resp: OscResponse) -> list | None:
+    def _cueLinksParser(self, resp: OscResponse) -> list[Cue] | None:
         """Parse the links present in a cue."""
         if len(resp.args) <= 2:
             # No links
             return None
 
-        logger.warning("No logic to parse Links")
-        return None
+        return [Cue.from_text(q) for q in resp.args[2:]]
 
-    def _cueActionsParser(self, resp: OscResponse) -> list | None:
+
+    def _cueActionsParser(self, resp: OscResponse) -> list[str] | None:
         """Parse the actions present in a cue."""
         if len(resp.args) <= 2:
             # No links
             return None
 
-        logger.warning("No logic to parse actions")
-        return None
+        return resp.args[2:]

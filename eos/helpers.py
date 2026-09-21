@@ -26,6 +26,9 @@ class EosTimeoutError(EosError):
 class EosCmdLineError(EosError):
     """Command line error exception."""
 
+class EosParsingError(EosError):
+    """Error with parsing received data."""
+
 
 class EosChanSelection:
     """Stores ranges as individual channels."""
@@ -162,7 +165,7 @@ class Cue:
     cuelist: int
     cue: int | Decimal
     part: int = 0
-    label: str | None = None
+    label: str = ""
     duration: Decimal | None = None
     percentage: Decimal | None = None
 
@@ -173,17 +176,20 @@ class Cue:
             return f"{self.cuelist:g} / {self.cue:g}"
         return f"{self.cuelist:g} / {self.cue:g} Part {self.part:g}"
 
-    # TODO: hint return self in 3.11
     @classmethod
-    def empty_cue(cls):
+    def empty_cue(cls) -> Self:
         return cls(cuelist=-1, cue=-1, part=-1, duration=None, percentage=None)
 
     @classmethod
-    def from_active_cue(cls, text: str):
+    def from_active_cue(cls, text: str) -> Self:
         """Parse cue data from OSC active cue status message."""
         fields = text.split(" ")
-        cuelist = int(fields[0].split("/")[0])
-        cue = Decimal(fields[0].split("/")[1])
+        if "/" not in fields[0]:
+            cuelist = 0
+            cue = 0
+        else:
+            cuelist = int(fields[0].split("/")[0])
+            cue = Decimal(fields[0].split("/")[1])
 
         return cls(
             cuelist=cuelist,
@@ -194,15 +200,29 @@ class Cue:
         )
 
     @classmethod
-    def from_nonactive_cue(cls, text: str):
+    def from_nonactive_cue(cls, text: str) -> Self:
         """Parse cue data from OSC active cue status message."""
         fields = text.split(" ")
+        duration = Decimal(0) if len(fields) == 1 else Decimal(fields[-1])
         cuelist = int(fields[0].split("/")[0])
         cue = Decimal(fields[0].split("/")[1])
 
         return cls(
-            cuelist=cuelist, cue=cue, label=" ".join(fields[1:-2]), duration=Decimal(fields[-1])
+            cuelist=cuelist, cue=cue, label=" ".join(fields[1:-2]), duration=duration
         )
+
+    @classmethod
+    def from_text(cls, text: str, default_cuelist: int = 0) -> Self:
+        """Parse cue data from a passed string like `47` or `4/97`"""
+        if "/" in text:
+            cuelist = int(text.split("/")[0])
+            cuenum = Decimal(text.split("/")[1])
+        else:
+            cuelist = default_cuelist
+            cuenum = Decimal(text)
+
+        return cls(cuelist=cuelist, cue=cuenum)
+
 
 
 @dataclass
@@ -227,16 +247,16 @@ class CueProperties(EosProperties):
     part: int
 
     # Order matches Eos output
-    uptime: float
-    updelay: float
-    downtime: float
-    downdelay: float
-    focustime: float
-    focusdelay: float
-    colortime: float
-    colordelay: float
-    beamtime: float
-    beamdelay: float
+    uptime: Decimal
+    updelay: Decimal
+    downtime: Decimal 
+    downdelay: Decimal 
+    focustime: Decimal
+    focusdelay: Decimal
+    colortime: Decimal
+    colordelay: Decimal
+    beamtime: Decimal
+    beamdelay: Decimal
 
     preheat: bool
     curve: float
@@ -247,8 +267,8 @@ class CueProperties(EosProperties):
     assertstr: str
     links: str | float
 
-    followtime: float
-    hangtime: float
+    followtime: Decimal 
+    hangtime: Decimal
     allfade: bool
     numloops: int
     solo: bool
@@ -259,9 +279,9 @@ class CueProperties(EosProperties):
     scene_end: bool
     cuepartindex: int
 
-    fx: str | None = None
-    actions: str | None = None
-    links2: str | None = None
+    fx: list[str] | None = None
+    actions: list[str] | None = None
+    links2: list[Cue] | None = None
 
     @classmethod
     def from_list(cls, cuelist: int, cue: Decimal, part: int, msg: list[Any]):
@@ -270,36 +290,36 @@ class CueProperties(EosProperties):
             msg[0],
             msg[1],
             msg[2],
-            cuelist,
-            part,
-            msg[3],
-            msg[4],
-            msg[5],
-            msg[6],
-            msg[7],
-            msg[8],
-            msg[9],
-            msg[10],
-            msg[11],
-            msg[12],
-            msg[13],
-            msg[14],
-            msg[15],
-            msg[16],
-            msg[17],
-            msg[18],
-            msg[19],
-            msg[20],
-            msg[21],
-            msg[22],
-            msg[23],
-            msg[24],
-            msg[25],
-            msg[26],
-            msg[27],
-            msg[28],
-            msg[29],
-            msg[30],
+            cuelist=cuelist,
+            part=part,
+            uptime=Decimal(msg[3]) / Decimal(1000),
+            updelay=Decimal(msg[4]) / Decimal(1000),
+            downtime=Decimal(msg[5]) / Decimal(1000),
+            downdelay=Decimal(msg[6]) / Decimal(1000),
+            focustime=Decimal(msg[7]) / Decimal(1000),
+            focusdelay=Decimal(msg[8]) / Decimal(1000),
+            colortime=Decimal(msg[9]) / Decimal(1000),
+            colordelay=Decimal(msg[10]) / Decimal(1000),
+            beamtime=Decimal(msg[11]) / Decimal(1000),
+            beamdelay=Decimal(msg[12]) / Decimal(1000),
+            preheat=msg[13],
+            curve=msg[14],
+            rate=msg[15],
+            markstr=msg[16],
+            blockstr=msg[17],
+            assertstr=msg[18],
+            links=msg[19],
+            followtime=Decimal(msg[20]) / Decimal(1000),
+            hangtime=Decimal(msg[21]) / Decimal(1000),
+            allfade=msg[22],
+            numloops=msg[23],
+            solo=msg[24],
+            timecode=msg[25],
+            partcount=msg[26],
+            notes=msg[27],
+            scene=msg[28],
+            scene_end=msg[29],
+            cuepartindex=msg[30],
         )
 
 

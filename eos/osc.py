@@ -26,7 +26,7 @@ class OscConnection(ABC):
         """Read the next message in the queue."""
 
     @abstractmethod
-    def handle_messages(self, timeout: float = 0.1, retries: int = 3) -> None:
+    def handle_messages(self, timeout: float = 0.1) -> None:
         """Read all messages in queue and execute associated handlers."""
 
 
@@ -98,7 +98,7 @@ class TcpOscConnection(OscConnection):
         return OscPacket(msg)
 
     @override
-    def handle_messages(self, timeout: float = 0.1, retries: int = 3) -> None:
+    def handle_messages(self, timeout: float = 0.1) -> None:
         msgs = []
 
         start_time = time.perf_counter()
@@ -119,7 +119,7 @@ class PacketLengthTcpOscConnection(TcpOscConnection):
     def __init__(self, ip: str, port: int) -> None:
         """Connect to an Eos session over TCP v1.0."""
         self.client = SimpleTCPClient(ip, port)
-        logger.info("Connected to %s:%s (TCP v1.0 Packet Length)", self.ip_address, self.port)
+        logger.info("Connected to %s:%s (TCP v1.0 Packet Length)", ip, port)
 
         super().__init__(ip, port)
 

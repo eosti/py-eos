@@ -69,6 +69,5 @@ class EosGroups(EosGroupIterator):
     def delete(self, group_num: int | Decimal) -> None:
         """Delete a group."""
         self.eos.send_command(f"Delete Group {group_num} # #")
-        self.eos.osc.handle_messages()
         if self.eos.system.cmd_line_error:
             raise EosCmdLineError(f"Group {group_num} does not exist")
