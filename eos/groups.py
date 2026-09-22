@@ -8,9 +8,9 @@ from eos.helpers import (
     EosChanSelection,
     EosCmdLineError,
     EosError,
-    GroupProperties,
 )
 from eos.iterator import EosGroupIterator
+from eos.properties import GroupProperties
 
 logger = logging.getLogger(__name__)
 

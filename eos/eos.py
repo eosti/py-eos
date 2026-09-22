@@ -5,8 +5,9 @@ import sys
 from typing import Any, Self
 
 from eos.cues import EosCues
+from eos.enums import EosTargets
 from eos.groups import EosGroups
-from eos.helpers import EosCmdLineError, EosError, EosTargets
+from eos.helpers import EosCmdLineError, EosError
 from eos.iterator import (
     EosRefDataIterator,
 )
@@ -58,7 +59,7 @@ class Eos:
         """Send a full command to Eos."""
         Transaction(
             self.osc,
-            query_path="/eos/newcmd",
+            query_addr="/eos/newcmd",
             query_data=[commandline],
             resp_filter="/eos/out/cmd",
             num_resps=1,

@@ -2,20 +2,30 @@
 
 import logging
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from eos.eos import Eos
 
 
-from eos.helpers import EosActiveChannel, EosError, EosState, EosTimeoutError, EosWheel
+from pythonosc.osc_message_builder import ArgValue
+
+from eos.enums import EosState
+from eos.helpers import (
+    EosActiveChannel,
+    EosError,
+    EosTimeoutError,
+    EosWheel,
+    is_decimal_sequence,
+    is_str_sequence,
+)
 from eos.transaction import Transaction
 
 logger = logging.getLogger(__name__)
 
 
 class EosSystem:
-    """Mixin for Eos system-level actions."""
+    """Class for Eos system-level actions."""
 
     def __init__(self, eos: "Eos") -> None:
         self.eos = eos
@@ -24,9 +34,9 @@ class EosSystem:
         self.softkeys: list[str | None] = [None] * 12
         self.user_cmd_line: dict[int, tuple[str, str, bool]] = {}
 
-        self.hs: tuple[float, float]
-        self.pantilt: tuple[float, float]
-        self.xyz: tuple[float, float, float]
+        self.hs: tuple[Decimal, Decimal] | None
+        self.pantilt: tuple[Decimal, Decimal] | None
+        self.xyz: tuple[Decimal, Decimal, Decimal] | None
         self.user_id: int
         self.show_name: str
         self.eos_state: EosState
@@ -63,7 +73,7 @@ class EosSystem:
         try:
             resp = Transaction(
                 osc_conn=self.eos.osc,
-                query_path="/eos/ping",
+                query_addr="/eos/ping",
                 query_data=[message],
                 resp_filter="/eos/out/ping",
                 num_resps=1,
@@ -83,7 +93,7 @@ class EosSystem:
         try:
             resp = Transaction(
                 osc_conn=self.eos.osc,
-                query_path="/eos/get/version",
+                query_addr="/eos/get/version",
                 query_data=None,
                 resp_filter="/eos/out/get/version",
                 num_resps=1,
@@ -94,31 +104,40 @@ class EosSystem:
         version = resp[0].args[0]
         return str(version)
 
-    def _updateUserHandler(self, _addr: str, *args: list[Any]) -> None:
+    def _updateUserHandler(self, _addr: str, *args: ArgValue) -> None:
+        if not is_decimal_sequence(args):
+            raise TypeError("Unexpected types in OSC argument")
         self.user_id = int(args[0])
         logger.debug("User ID: %i", self.user_id)
 
-    def _updateShowNameHandler(self, _addr: str, *args: list[Any]) -> None:
+    def _updateShowNameHandler(self, _addr: str, *args: ArgValue) -> None:
+        if not is_str_sequence(args):
+            raise TypeError("Unexpected types in OSC argument")
         self.show_name = args[0]
         logger.debug("Show name: %s", self.show_name)
 
-    def _updateStateHandler(self, _addr: str, *args: list[Any]) -> None:
+    def _updateStateHandler(self, _addr: str, *args: ArgValue) -> None:
+        if not is_decimal_sequence(args):
+            raise TypeError("Unexpected types in OSC argument")
         self.eos_state = EosState(int(args[0]))
         logger.debug("Eos state: %s", self.eos_state)
 
-    def _updateLockedHandler(self, _addr: str, *args: list[Any]) -> None:
+    def _updateLockedHandler(self, _addr: str, *args: ArgValue) -> None:
         self.is_locked = bool(args[0])
         logger.debug("Is locked: %s", self.is_locked)
 
-    def _updateSoftKeyHandler(self, addr: str, *args: list[Any]) -> None:
+    def _updateSoftKeyHandler(self, addr: str, *args: ArgValue) -> None:
         sk_num = int(addr.rsplit("/", 1)[1])
+
+        if not is_str_sequence(args):
+            raise TypeError("Unexpected types in OSC argument")
         # zero-index the python array
         if args[0] == "":
             self.softkeys[sk_num - 1] = None
         else:
             self.softkeys[sk_num - 1] = args[0]
 
-    def _updateActiveChanHandler(self, _addr: str, *args: list[Any]) -> None:
+    def _updateActiveChanHandler(self, _addr: str, *args: ArgValue) -> None:
         self.active_chan = EosActiveChannel.from_args(args)
 
         if self.active_chan is not None:
@@ -133,18 +152,18 @@ class EosSystem:
         # When active chan is updated, wheels will reset
         self.wheels.clear()
 
-    def _updateWheelHandler(self, addr: str, *args: list[Any]) -> None:
+    def _updateWheelHandler(self, addr: str, *args: ArgValue) -> None:
         wheel_no = int(addr.rsplit("/", maxsplit=1)[-1])
         self.wheels.update({wheel_no: EosWheel.from_args(wheel_no, args)})
 
-    def _resetWheelHandler(self, addr: str, *args: list[Any]) -> None:
+    def _resetWheelHandler(self, addr: str, *args: ArgValue) -> None:
         if args[0] != 0:
             logger.warning("Non-zero empty wheel value... Something is afoot!")
             logger.warning("%s %s", addr, args[0])
         else:
             self.wheels.clear()
 
-    def _resetSwitchHandler(self, addr: str, *args: list[Any]) -> None:
+    def _resetSwitchHandler(self, addr: str, *args: ArgValue) -> None:
         if args[0] != 0:
             logger.warning("Non-zero empty switch value... Something is afoot!")
             logger.warning("%s %s", addr, args[0])
@@ -152,7 +171,10 @@ class EosSystem:
             # Switches not implemented yet
             pass
 
-    def _updateCmdHandler(self, _addr: str, *args: list[Any]) -> None:
+    def _updateCmdHandler(self, _addr: str, *args: ArgValue) -> None:
+        if not is_str_sequence(args):
+            raise TypeError("Unexpected types in OSC argument")
+
         combined_cmd = "".join(args[:-1])
         self.display_mode = combined_cmd.split(":")[0]
         self.cmd_line_error = bool(args[-1])
@@ -163,8 +185,10 @@ class EosSystem:
         else:
             logger.debug("%s: %s", self.display_mode, self.cmd_line)
 
-    def _updateUserCmdHandler(self, addr: str, *args: list[Any]) -> None:
-        logger.debug(args)
+    def _updateUserCmdHandler(self, addr: str, *args: ArgValue) -> None:
+        if not is_str_sequence(args):
+            raise TypeError("Unexpected types in OSC argument")
+
         user_number = int(addr.split("/")[-2])
         combined_cmd = "".join(args[:-1])
         display_mode = combined_cmd.split(":")[0].strip()
@@ -182,23 +206,30 @@ class EosSystem:
             self.user_cmd_line[user_number][1],
         )
 
-    def _updateHSColorHandler(self, _addr: str, *args: list[Any]) -> None:
+    def _updateHSColorHandler(self, _addr: str, *args: ArgValue) -> None:
         if len(args) == 0:
             self.hs = None
         else:
+            if not is_decimal_sequence(args):
+                raise TypeError("Unexpected types in OSC argument")
             self.hs = (Decimal(args[0]), Decimal(args[1]))
             logger.debug("Hue/Sat: %f, %f", self.hs[0], self.hs[1])
 
-    def _updatePanTiltHandler(self, _addr: str, *args: list[Any]) -> None:
+    def _updatePanTiltHandler(self, _addr: str, *args: ArgValue) -> None:
         if len(args) == 0:
             self.pantilt = None
         else:
+            if not is_decimal_sequence(args):
+                raise TypeError("Unexpected types in OSC argument")
             self.pantilt = (Decimal(args[0]), Decimal(args[1]))
             logger.debug("Pan/Tilt: %f, %f", self.pantilt[0], self.pantilt[1])
 
-    def _updateXYZHandler(self, _addr: str, *args: list[Any]) -> None:
+    def _updateXYZHandler(self, _addr: str, *args: ArgValue) -> None:
         if len(args) == 0:
             self.xyz = None
         else:
+            if not is_decimal_sequence(args):
+                raise TypeError("Unexpected types in OSC argument")
+
             self.xyz = (Decimal(args[0]), Decimal(args[1]), Decimal(args[2]))
             logger.debug("X/Y/Z: %f, %f, %f", self.xyz[0], self.xyz[1], self.xyz[2])

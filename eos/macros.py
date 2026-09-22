@@ -5,7 +5,8 @@ import time
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from eos.helpers import EosError, EosTab
+from eos.enums import EosTab
+from eos.helpers import EosError
 from eos.iterator import EosMacroIterator
 
 if TYPE_CHECKING:

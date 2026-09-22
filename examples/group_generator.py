@@ -12,7 +12,8 @@ from rich.prompt import Confirm
 from rich.table import Table
 
 from eos import Eos
-from eos.helpers import EosChanSelection, EosError, GroupProperties
+from eos.helpers import EosChanSelection, EosError
+from eos.properties import GroupProperties
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,6 @@
 import argparse
 import logging
-import os
+from pathlib import Path
 import time
 
 from path import Path
@@ -12,13 +12,15 @@ from eos import Cue, Eos
 
 
 def text_file(path: str) -> str:
-    if not os.path.isfile(path):
+    """Check if a path is a text file."""
+    if not Path(path).is_file():
         raise argparse.ArgumentTypeError("Path is not a valid file")
 
     return path
 
 
 def main() -> None:
+    """Main function."""
     parser = argparse.ArgumentParser()
     parser.add_argument("yaml", help="YAML config file", type=text_file)
 
@@ -33,7 +35,7 @@ def main() -> None:
     config_schema = Map({"blackout_offset": Float()})
     root_schema = Map({"scenes": Seq(scene_schema), "config": config_schema})
 
-    input_data = load(Path(args.yaml).bytes().decode("utf-8"), root_schema)
+    input_data = load(Path(args.yaml).text(), root_schema)
 
     for i in input_data["scenes"].data:
         # Create blackout cue first

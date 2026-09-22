@@ -8,8 +8,8 @@ import logging
 import sys
 import time
 from dataclasses import dataclass
-from pathlib import Path
 from decimal import Decimal
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -262,9 +262,7 @@ def write_cue(eos: Eos, cue: CuelistCue) -> None:
         eos.cues.label(fx_part, f"FX: {cue.fx}")
 
 
-def write_spot_diff_cuelist(
-    eos: Eos, cue: CuelistCue, characters: set[str], spot_idx=400
-) -> None:
+def write_spot_diff_cuelist(eos: Eos, cue: CuelistCue, characters: set[str], spot_idx=400) -> None:
     """Spotidx is the offset used for presets and cuelists.
     lots of assumptions here that your spots are 401 and 402.
     """

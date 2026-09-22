@@ -1,15 +1,16 @@
 """Cue-related functionality."""
 
 import logging
-import time
-from typing import TYPE_CHECKING, Any
 from decimal import Decimal
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from eos.eos import Eos
 
-from eos.helpers import Cue, CueProperties, EosError, EosState, EosCmdLineError
+from eos.enums import EosState
+from eos.helpers import Cue, EosCmdLineError, EosError
 from eos.iterator import EosCueIterator
+from eos.properties import CueProperties
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +106,6 @@ class EosCues(EosCueIterator):
         if self.eos.system.cmd_line_error:
             raise EosCmdLineError(f"Cue {cue} does not exist")
 
-
     def intensity_block(self, cue: Cue) -> None:
         """Give a cue an Intensity Block flag."""
         props = self.get_cue(cue)
@@ -153,7 +153,9 @@ class EosCues(EosCueIterator):
         """Label a cue."""
         self._send_command(f"Cue {cue.cue_format()} Label {label} #")
 
-    def set_time(self, cue: Cue, uptime: Decimal | int, downtime: Decimal | int | None = None) -> None:
+    def set_time(
+        self, cue: Cue, uptime: Decimal | int, downtime: Decimal | int | None = None
+    ) -> None:
         """Set the time of a cue (i.e. intensity up if other values already set)."""
         if downtime is None:
             self._send_command(f"Cue {cue.cue_format()} Time {uptime} #")

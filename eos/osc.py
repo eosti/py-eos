@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 from typing import override
 
 from pythonosc.dispatcher import Dispatcher
-from pythonosc.osc_packet import OscPacket
 from pythonosc.osc_tcp_server import MODE_1_1
 from pythonosc.tcp_client import SimpleTCPClient
 from pythonosc.udp_client import SimpleUDPClient
@@ -14,17 +13,15 @@ logger = logging.getLogger(__name__)
 
 class OscConnection(ABC):
     @property
-    def dispatcher(self):
-        return self._dispatcher
+    def dispatcher(self) -> Dispatcher:
+        """Helper to wrap the dispatcher in a type annotation."""
+        return self._dispatcher  # pyright: ignore[reportAttributeAccessIssue]
 
     @abstractmethod
     def write(self, path: str, args: list[str | int | float | bool] | None = None) -> None:
         """Write an OSC string to Eos."""
 
     @abstractmethod
-    def read_next(self, timeout: int = 30) -> OscPacket:
-        """Read the next message in the queue."""
-
     @abstractmethod
     def handle_messages(self, timeout: float = 0.1) -> None:
         """Read all messages in queue and execute associated handlers."""
@@ -40,6 +37,7 @@ class UdpOscConnection(OscConnection):
             ip: IP of Eos instance
             rx_port: the RX port as described by Eos
             tx_port: the TX port as described by Eos
+            generic_delay: what a "generic delay" is, can help with slow consoles/connections.
 
         """
         self.ip_address = ip
@@ -62,8 +60,9 @@ class UdpOscConnection(OscConnection):
     def write(self, path: str, args: list[str | int | float | bool] | None = None) -> None:
         logger.debug(path)
         if args is not None:
-            logger.warning("Seemingly don't support arguments for UDP??")
-        self.client.send_message(path, args)
+            self.client.send_message(path, args)
+        if args is None:
+            self.client.send_message(path, [])
 
 
 class TcpOscConnection(OscConnection):
@@ -93,16 +92,10 @@ class TcpOscConnection(OscConnection):
             self.client.send_message(path, args)
 
     @override
-    def read_next(self, timeout: int = 30) -> OscPacket:
-        msg = self.client.receive(timeout)
-        return OscPacket(msg)
-
-    @override
     def handle_messages(self, timeout: float = 0.1) -> None:
-        msgs = []
 
         start_time = time.perf_counter()
-        msg = self.client.receive(timeout)
+        msg = self.client.receive(timeout)  # pyright: ignore[reportArgumentType]
         while msg:
             for i in msg:
                 self.dispatcher.call_handlers_for_packet(i, (self.ip_address, self.port))
@@ -110,7 +103,7 @@ class TcpOscConnection(OscConnection):
             time_left = timeout - (time.perf_counter() - start_time)
             if time_left < 0:
                 break
-            msg = self.client.receive(time_left)
+            msg = self.client.receive(time_left)  # pyright: ignore[reportArgumentType]
 
 
 class PacketLengthTcpOscConnection(TcpOscConnection):

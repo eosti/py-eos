@@ -4,21 +4,23 @@ import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from eos.transaction import OscResponse, Transaction
 
 if TYPE_CHECKING:
     from eos.eos import Eos
 
+from eos.enums import EosTargets
 from eos.helpers import (
     Cue,
-    CueListProperties,
-    CueProperties,
     EosChanSelection,
     EosError,
     EosParsingError,
-    EosTargets,
+)
+from eos.properties import (
+    CueListProperties,
+    CueProperties,
     GroupProperties,
     MacroProperties,
     RefDataProperties,
@@ -47,15 +49,13 @@ class EosIterator[T](ABC):
         if self.target == "cue":
             raise NotImplementedError
 
-        query_str = f"get/{self.target}/count"
-
         resp = Transaction(
-                osc_conn=self.eos.osc,
-                query_path=f"/eos/get/{self.target}/count",
-                query_data=None,
-                resp_filter=f"/eos/out/get/{self.target}/count",
-                num_resps=1
-            ).query()
+            osc_conn=self.eos.osc,
+            query_addr=f"/eos/get/{self.target}/count",
+            query_data=None,
+            resp_filter=f"/eos/out/get/{self.target}/count",
+            num_resps=1,
+        ).query()
 
         if not isinstance(resp[0].args[0], int):
             logger.warning("Uncertain target count conversion %s", resp[0].args[0])
@@ -65,7 +65,6 @@ class EosIterator[T](ABC):
 
         logger.debug("Got %i of %s", target_count, self.target)
         return target_count
-
 
     def get(self, num: int | Decimal) -> T:
         """Get a target from the Eos number."""
@@ -100,7 +99,7 @@ class EosIterator[T](ABC):
         """Query Eos for a data and handle the multi-line result."""
         resp = Transaction(
             osc_conn=self.eos.osc,
-            query_path=f"/eos/{query_str}",
+            query_addr=f"/eos/{query_str}",
             query_data=None,
             resp_filter=f"/eos/out/get/{self.target}/*",
             num_resps=EosTargets[self.target],
@@ -328,7 +327,7 @@ class EosCueIterator:
         """Query Eos for a data and handle the multi-line result."""
         resp = Transaction(
             osc_conn=self.eos.osc,
-            query_path=f"/eos/{query_str}",
+            query_addr=f"/eos/{query_str}",
             query_data=None,
             resp_filter="/eos/out/get/cue/*",
             num_resps=EosTargets["cue"],
@@ -342,12 +341,12 @@ class EosCueIterator:
             cuelist = self.cuelist
 
         resp = Transaction(
-                osc_conn=self.eos.osc,
-                query_path=f"/eos/get/cue/{cuelist}/count",
-                query_data=None,
-                resp_filter=f"/eos/out/get/cue/{cuelist}/count",
-                num_resps=1
-            ).query()
+            osc_conn=self.eos.osc,
+            query_addr=f"/eos/get/cue/{cuelist}/count",
+            query_data=None,
+            resp_filter=f"/eos/out/get/cue/{cuelist}/count",
+            num_resps=1,
+        ).query()
 
         if not isinstance(resp[0].args[0], int):
             logger.warning("Uncertain target count conversion %s", resp[0].args[0])
@@ -443,7 +442,6 @@ class EosCueIterator:
             return None
 
         return resp.args[2:]
-
 
     def _cueActionsParser(self, resp: OscResponse) -> list[str] | None:
         """Parse the actions present in a cue."""

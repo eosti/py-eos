@@ -1,12 +1,12 @@
 """Collection of helpers for various Eos things."""
 
 import itertools
-from abc import ABC
 from collections.abc import Iterator, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import Decimal
-from enum import IntEnum
-from typing import Any, Self
+from typing import Any, Self, TypeGuard
+
+from eos.enums import EosWheelCategory
 
 # TODO: how to make changing the attributes in CueProperties actually affect the cue?
 # Then we could get rid of setters entirely, which would be nice
@@ -25,6 +25,7 @@ class EosTimeoutError(EosError):
 
 class EosCmdLineError(EosError):
     """Command line error exception."""
+
 
 class EosParsingError(EosError):
     """Error with parsing received data."""
@@ -45,12 +46,12 @@ class EosChanSelection:
     def __iter__(self) -> Iterator[Decimal]:
         yield from self.chans
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, EosChanSelection):
             return self.chans == other.chans
         return False
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self.chans)
 
     @classmethod
@@ -138,7 +139,7 @@ class EosActiveChannel:
     fixture_version: int
 
     @classmethod
-    def from_args(cls, args: list[Any]):
+    def from_args(cls, args: tuple[Any, ...]) -> Self | None:
         if args[0] == "":
             return None
         chan = EosChanSelection.from_active_chans(args[0].split("[")[0])
@@ -207,198 +208,19 @@ class Cue:
         cuelist = int(fields[0].split("/")[0])
         cue = Decimal(fields[0].split("/")[1])
 
-        return cls(
-            cuelist=cuelist, cue=cue, label=" ".join(fields[1:-2]), duration=duration
-        )
+        return cls(cuelist=cuelist, cue=cue, label=" ".join(fields[1:-2]), duration=duration)
 
     @classmethod
     def from_text(cls, text: str, default_cuelist: int = 0) -> Self:
-        """Parse cue data from a passed string like `47` or `4/97`"""
+        """Parse cue data from a passed string like `47` or `4/97`."""
         if "/" in text:
-            cuelist = int(text.split("/")[0])
+            cuelist = int(text.split("/", maxsplit=1)[0])
             cuenum = Decimal(text.split("/")[1])
         else:
             cuelist = default_cuelist
             cuenum = Decimal(text)
 
         return cls(cuelist=cuelist, cue=cuenum)
-
-
-
-@dataclass
-class EosProperties(ABC):
-    number: Decimal
-    # Ignore this field in equality since Eos sometimes doesn't give this value
-    index: int | None = field(compare=False)
-    uid: str
-    label: str
-
-    def __post_init__(self):
-        if self.index == -1:
-            # Eos may "optimize" out the index number to -1 unless you query by index
-            self.index = None
-        if not isinstance(self.number, Decimal):
-            self.number = Decimal(self.number)
-
-
-@dataclass
-class CueProperties(EosProperties):
-    cuelist: int
-    part: int
-
-    # Order matches Eos output
-    uptime: Decimal
-    updelay: Decimal
-    downtime: Decimal 
-    downdelay: Decimal 
-    focustime: Decimal
-    focusdelay: Decimal
-    colortime: Decimal
-    colordelay: Decimal
-    beamtime: Decimal
-    beamdelay: Decimal
-
-    preheat: bool
-    curve: float
-    rate: int
-
-    markstr: str
-    blockstr: str
-    assertstr: str
-    links: str | float
-
-    followtime: Decimal 
-    hangtime: Decimal
-    allfade: bool
-    numloops: int
-    solo: bool
-    timecode: str
-    partcount: int
-    notes: str
-    scene: str
-    scene_end: bool
-    cuepartindex: int
-
-    fx: list[str] | None = None
-    actions: list[str] | None = None
-    links2: list[Cue] | None = None
-
-    @classmethod
-    def from_list(cls, cuelist: int, cue: Decimal, part: int, msg: list[Any]):
-        return cls(
-            cue,
-            msg[0],
-            msg[1],
-            msg[2],
-            cuelist=cuelist,
-            part=part,
-            uptime=Decimal(msg[3]) / Decimal(1000),
-            updelay=Decimal(msg[4]) / Decimal(1000),
-            downtime=Decimal(msg[5]) / Decimal(1000),
-            downdelay=Decimal(msg[6]) / Decimal(1000),
-            focustime=Decimal(msg[7]) / Decimal(1000),
-            focusdelay=Decimal(msg[8]) / Decimal(1000),
-            colortime=Decimal(msg[9]) / Decimal(1000),
-            colordelay=Decimal(msg[10]) / Decimal(1000),
-            beamtime=Decimal(msg[11]) / Decimal(1000),
-            beamdelay=Decimal(msg[12]) / Decimal(1000),
-            preheat=msg[13],
-            curve=msg[14],
-            rate=msg[15],
-            markstr=msg[16],
-            blockstr=msg[17],
-            assertstr=msg[18],
-            links=msg[19],
-            followtime=Decimal(msg[20]) / Decimal(1000),
-            hangtime=Decimal(msg[21]) / Decimal(1000),
-            allfade=msg[22],
-            numloops=msg[23],
-            solo=msg[24],
-            timecode=msg[25],
-            partcount=msg[26],
-            notes=msg[27],
-            scene=msg[28],
-            scene_end=msg[29],
-            cuepartindex=msg[30],
-        )
-
-
-@dataclass
-class GroupProperties(EosProperties):
-    chans: EosChanSelection | None = None
-
-    @classmethod
-    def from_list(cls, grp: Decimal, props: list):
-        return cls(grp, props[0], props[1], props[2])
-
-
-@dataclass
-class MacroProperties(EosProperties):
-    mode: str
-    command: list[str] | None = None
-
-    @classmethod
-    def from_list(cls, macro: Decimal, props: list):
-        return cls(macro, props[0], props[1], props[2], props[3])
-
-
-@dataclass
-class RefDataProperties(EosProperties):
-    """Collection of properties for referenced data."""
-
-    absolute: bool
-    locked: bool
-
-    chans: EosChanSelection | None = None
-    bytype: EosChanSelection | None = None
-    fx: str | None = None
-
-    @classmethod
-    def from_list(cls, number: Decimal, props: list[Any]):
-        """Create a RefDataProperties from a list of properties."""
-        return cls(number, *props)
-
-
-@dataclass
-class CueListProperties(EosProperties):
-    """Collection of properties from a cue list."""
-
-    playback_mode: str
-    fader_mode: str
-    independent: bool
-    htp: bool
-    assert_state: bool
-    block: bool
-    background: bool
-    solo_mode: bool
-    timecode_list: int
-    oos_sync: bool
-
-    links: list[int] | None = None
-
-    @classmethod
-    def from_list(cls, number: Decimal, props: list[Any]):
-        """Create a CueListProperties from a list of properties."""
-        return cls(number, *props)
-
-
-class EosState(IntEnum):
-    """Enum mapping Eos state to ints."""
-
-    BLIND = 0
-    LIVE = 1
-
-
-class EosWheelCategory(IntEnum):
-    """Enum mapping Eos wheel categories to ints."""
-
-    UNASSIGNED = 0
-    INTENSITY = 1
-    FOCUS = 2
-    COLOR = 3
-    IMAGE = 4
-    FORM = 5
-    SHUTTER = 6
 
 
 @dataclass
@@ -412,7 +234,7 @@ class EosWheel:
     category: EosWheelCategory
 
     @classmethod
-    def from_args(cls, num: int, args: list[Any]) -> Self:
+    def from_args(cls, num: int, args: tuple[Any, ...]) -> Self:
         """Create an EosWheel from OSC arguments."""
         name = args[0].split("[")[0].strip()
         pretty_value = int(args[0].split("[")[1].replace("]", ""))
@@ -426,71 +248,11 @@ class EosWheel:
         )
 
 
-"""
-Valid iterator targets.
-Dict value represents # of OSC messages to get full data
-"""
-EosTargets = {
-    "patch": 0,
-    "cuelist": 0,
-    "cue": 4,
-    "group": 2,
-    "macro": 2,
-    "sub": 0,
-    "preset": 4,
-    "ip": 3,
-    "fp": 3,
-    "cp": 3,
-    "bp": 3,
-    "curve": 0,
-    "fx": 0,
-    "snap": 0,
-    "pixmap": 0,
-    "ms": 0,
-}
+def is_str_sequence(values: tuple) -> TypeGuard[tuple[str, ...]]:
+    """Typing helper to check if all items in a list are strs."""
+    return all(isinstance(val, str) for val in values)
 
 
-class EosTab(IntEnum):
-    """Enum mapping tab names to tab numbers."""
-
-    AUGMENT3D = 38
-    BEAM_PALATTES = 25
-    CHANNELS_TABLE = 1
-    CHANNELS_IN_USE = 32
-    COLOR_PALETTES = 24
-    COLOR_PATHS = 33
-    CUES = 16
-    CURVES = 21
-    CUSTOM_DIRECT_SELECTS = 39
-    EFFECT_CHANNELS = 8
-    EFFECTS = 13
-    ENCODER_MAPS = 40
-    FADER_LIST_DISPLAY = 35
-    FOCUS_PALETTES = 23
-    GROUPS = 17
-    INTENSITY_PALETTES = 22
-    MACROS = 18
-    MAGIC_SHEET = 3
-    MAGIC_SHEET_LIST = 14
-    MANUAL = 100
-    PARK = 20
-    PATCH = 12
-    PIXEL_MAPS = 9
-    PRESETS = 26
-    PSD = 2
-    SACN_OUTPUT_VIEWER = 37
-    SHOW_CONTROL = 11
-    SNAPSHOTS = 19
-    SUBMASTERS = 15
-    ABOUT = 29
-    COLOR_PICKER = 27
-    COMMAND_HISTORY = 30
-    DIRECT_SELECTS = 4
-    EFFECT_STATUS = 6
-    FADER_CONFIG = 36
-    FADERS = 28
-    LAMP_CONTROLS = 31
-    ML_CONTROLS = 5
-    PIXEL_MAP_PREVIEW = 10
-    VIRTUAL_KEYBOARD = 7
-    DIAGNOSTICS = 99
+def is_decimal_sequence(values: tuple) -> TypeGuard[tuple[str | int | float, ...]]:
+    """Typing helper to check if all items in a list are Decimal-able."""
+    return all(isinstance(val, str | int | float) for val in values)

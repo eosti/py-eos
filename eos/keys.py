@@ -6,16 +6,20 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from eos.eos import Eos
 
-from eos.helpers import Cue, EosTab
+from eos.enums import EosTab
+from eos.helpers import Cue
 
 logger = logging.getLogger(__name__)
 
 
 class EosKeys:
-    """
+    """Class that holds keystrokes to be sent to Eos.
+
     Please see https://www.etcconnect.com/WebDocs/Controls/EosFamilyOnlineHelp/en/Content/23_Show_Control/08_OSC/OSC_Dictionary.htm#Keys
-        for valid keys
+    for valid keys.
+
     """
+
     def __init__(self, eos: "Eos", generic_delay: float = 0) -> None:
         self.eos = eos
         self._write = self.eos.osc.write
