@@ -2,37 +2,41 @@
 
 import logging
 import time
-from abc import ABC
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
-from eos.base import EosBase
-from eos.helpers import EosExceptionError, EosTab
+from eos.enums import EosTab
+from eos.helpers import EosError
 from eos.iterator import EosMacroIterator
+
+if TYPE_CHECKING:
+    from eos.eos import Eos
 
 logger = logging.getLogger(__name__)
 
 
-class EosMacros(ABC, EosBase):
+class EosMacros:
     """Mixin for macro-related actions."""
 
-    def __init__(self) -> None:
-        self.macro = EosMacroIterator(self)
+    def __init__(self, eos: "Eos") -> None:
+        self.eos = eos
+        self.iterator = EosMacroIterator(eos)
 
         super().__init__()
 
     def record_macro(self, macro: Decimal, commands: list[str]) -> None:
         """Record a macro with a given command sequence."""
         # TODO not working lol
-        self.open_tab(EosTab.MACROS)
+        self.eos.keys.open_tab(EosTab.MACROS)
         try:
-            self.macro.get(macro)
-        except EosExceptionError:
+            self.iterator.get(macro)
+        except EosError:
             logger.info("Recording new macro %f", macro)
-            self.send_command(str(macro) + "#")
-            self.press_key("softkey_6")
+            self.eos.send_command(str(macro) + "#")
+            self.eos.keys.press_key("softkey_6")
             time.sleep(0.1)
             for i in commands:
-                self.press_key(i)
-            self.press_key("Select")
+                self.eos.keys.press_key(i)
+            self.eos.keys.press_key("Select")
         else:
-            raise EosExceptionError(f"Macro {macro} already exists!")
+            raise EosError(f"Macro {macro} already exists!")

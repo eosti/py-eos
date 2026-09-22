@@ -5,17 +5,19 @@ Supports flags, scenes, spotlights, etc.
 
 import argparse
 import logging
+import sys
 import time
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from openpyxl import Workbook
-from openpyxl.styles import Alignment, Font, Border, Side, DEFAULT_FONT
+from openpyxl.styles import DEFAULT_FONT, Alignment, Border, Font, Side
 from openpyxl.utils import get_column_letter
 
-from eos import Cue, EosSLIP
+from eos import Cue, Eos
 
 logger = logging.getLogger(__name__)
 # Before running this, make a Q1 with hard zeroes and everything set to preset home
@@ -37,7 +39,7 @@ class CuelistCue:
     number: int
     label: str
     flags: list[str]
-    cue_time: float | None = None
+    cue_time: Decimal | None = None
     spot_1: SpotAction | None = None
     spot_2: SpotAction | None = None
     sfx: str | None = None
@@ -53,24 +55,11 @@ def text_file(path: str) -> str:
 
 
 def generate_blank_cuelist(num_spots=0) -> None:
-    headers = [
-        "Cue",
-        "Pg",
-        "Placement",
-        "Notes",
-        "Time"
-    ]
+    headers = ["Cue", "Pg", "Placement", "Notes", "Time"]
     header_widths = [6.5, 3.75, 40, 30, 4.5]
-    flag_headers = [
-        "Cue",
-        "Scene"
-    ]
+    flag_headers = ["Cue", "Scene"]
     flag_widths = [6, 25]
-    spot_headers = [
-        "Intens",
-        "Character",
-        "Notes"
-    ]
+    spot_headers = ["Intens", "Character", "Notes"]
     spot_widths = [6, 12, 6]
 
     wb = Workbook()
@@ -84,7 +73,7 @@ def generate_blank_cuelist(num_spots=0) -> None:
             c.alignment = Alignment(horizontal="center", vertical="center")
         else:
             c.alignment = Alignment(horizontal="left", vertical="center")
-        if h in ["Cue"]:
+        if h == "Cue":
             c.font = Font(bold=True)
         ws.merge_cells(start_row=1, end_row=2, start_column=col_idx, end_column=col_idx)
         col_idx += 1
@@ -92,7 +81,9 @@ def generate_blank_cuelist(num_spots=0) -> None:
     c = ws.cell(row=1, column=col_idx, value="Flags")
     c.alignment = Alignment(horizontal="center")
     c.font = Font(bold=True)
-    ws.merge_cells(start_row=1, end_row=1, start_column=col_idx, end_column=col_idx + len(flag_headers) - 1)
+    ws.merge_cells(
+        start_row=1, end_row=1, start_column=col_idx, end_column=col_idx + len(flag_headers) - 1
+    )
     for h in flag_headers:
         ws.cell(row=2, column=col_idx, value=h)
         col_idx += 1
@@ -101,7 +92,9 @@ def generate_blank_cuelist(num_spots=0) -> None:
         c = ws.cell(row=1, column=col_idx, value=f"Spot {spotnum}")
         c.alignment = Alignment(horizontal="center")
         c.font = Font(bold=True)
-        ws.merge_cells(start_row=1, end_row=1, start_column=col_idx, end_column=col_idx + len(spot_headers) - 1)
+        ws.merge_cells(
+            start_row=1, end_row=1, start_column=col_idx, end_column=col_idx + len(spot_headers) - 1
+        )
         for h in spot_headers:
             ws.cell(row=2, column=col_idx, value=h)
             col_idx += 1
@@ -152,7 +145,7 @@ def parse_cuelist(excel_file: str) -> list[CuelistCue]:
     cuelist = cuelist.astype(convert_dict)
 
     for _, row in cuelist.iterrows():
-        if not pd.isna(row['pg']):
+        if not pd.isna(row["pg"]):
             cue_label = f"Pg. {row['Pg']}: {row['Placement']}"
         else:
             cue_label = f"{row['Placement']}"
@@ -168,7 +161,7 @@ def parse_cuelist(excel_file: str) -> list[CuelistCue]:
         this_cue = CuelistCue(float(row["Cue"]), cue_label, flags)
 
         if not pd.isna(row["Time"]):
-            this_cue.cue_time = row["Time"]
+            this_cue.cue_time = Decimal(row["Time"])
 
         if not pd.isna(row["SFX"]):
             this_cue.sfx = row["SFX"]
@@ -221,52 +214,55 @@ def get_all_characters(cues: list[CuelistCue]) -> set[str]:
     return sorted_characters
 
 
-def generate_character_fps(eos: EosSLIP, characters: set[str], start_idx=400) -> None:
+def generate_character_fps(eos: Eos, characters: set[str], start_idx=400) -> None:
     for idx, val in enumerate(characters):
         eos.send_command(f"Focus_Palette {start_idx + idx} Label {val} #")
 
 
-def write_cue(eos: EosSLIP, cue: CuelistCue) -> None:
+def write_cue(eos: Eos, cue: CuelistCue) -> None:
     this_cue = Cue(1, cue.number)
-    eos.record_cue(this_cue)
+    eos.cues.record(this_cue)
     time.sleep(0.05)
-    eos.label_cue(this_cue, cue.label)
+    eos.cues.label(this_cue, cue.label)
 
     if cue.cue_time is not None:
-        eos.set_time(this_cue, cue.cue_time)
+        eos.cues.set_time(this_cue, cue.cue_time)
 
     if "I" in cue.flags:
-        eos.intensity_block_cue(this_cue)
+        eos.cues.intensity_block(this_cue)
     if "B" in cue.flags:
-        eos.block_cue(this_cue)
+        eos.cues.block(this_cue)
     if "A" in cue.flags:
-        eos.assert_cue(this_cue)
+        eos.cues.assert_flag(this_cue)
     if "M" in cue.flags:
-        mark_part = eos.record_part(this_cue, 20)
-        eos.mark_cue(mark_part)
-        eos.label_cue(mark_part, "--- MARK ---")
+        mark_part = Cue(this_cue.cuelist, this_cue.cue, 20)
+        eos.cues.record_part(mark_part)
+        eos.cues.mark(mark_part)
+        eos.cues.label(mark_part, "--- MARK ---")
     if "Mh" in cue.flags:
-        mark_part = eos.record_part(this_cue, 20)
-        eos.mark_high_cue(mark_part)
-        eos.label_cue(mark_part, "--- MARK ---")
+        mark_part = Cue(this_cue.cuelist, this_cue.cue, 20)
+        eos.cues.record_part(mark_part)
+        eos.cues.mark_high(mark_part)
+        eos.cues.label(mark_part, "--- MARK ---")
     if "Ml" in cue.flags:
-        mark_part = eos.record_part(this_cue, 20)
-        eos.mark_low_cue(mark_part)
-        eos.label_cue(mark_part, "--- MARK ---")
+        mark_part = Cue(this_cue.cuelist, this_cue.cue, 20)
+        eos.cues.record_part(mark_part)
+        eos.cues.mark_low(mark_part)
+        eos.cues.label(mark_part, "--- MARK ---")
     if next((s for s in cue.flags if "Sc" in s), None):
         scene_marker = next(s for s in cue.flags if "Sc" in s).split(" ", 1)[1]
-        eos.add_scene(this_cue, scene_marker)
+        eos.cues.add_scene(this_cue, scene_marker)
     if cue.sfx is not None:
-        sfx_part = eos.record_part(this_cue, 19)
-        eos.label_cue(sfx_part, f"SFX: {cue.sfx}")
+        sfx_part = Cue(this_cue.cuelist, this_cue.cue, 19)
+        eos.cues.record_part(sfx_part)
+        eos.cues.label(sfx_part, f"SFX: {cue.sfx}")
     if cue.fx is not None:
-        fx_part = eos.record_part(this_cue, 18)
-        eos.label_cue(fx_part, f"FX: {cue.fx}")
+        fx_part = Cue(this_cue.cuelist, this_cue.cue, 18)
+        eos.cues.record_part(fx_part)
+        eos.cues.label(fx_part, f"FX: {cue.fx}")
 
 
-def write_spot_diff_cuelist(
-    eos: EosSLIP, cue: CuelistCue, characters: set[str], spot_idx=400
-) -> None:
+def write_spot_diff_cuelist(eos: Eos, cue: CuelistCue, characters: set[str], spot_idx=400) -> None:
     """Spotidx is the offset used for presets and cuelists.
     lots of assumptions here that your spots are 401 and 402.
     """
@@ -274,7 +270,7 @@ def write_spot_diff_cuelist(
         if getattr(cue, f"spot_{spotnum}") is None:
             continue
         spot_cue = Cue(spot_idx + spotnum, cue.number)
-        eos.record_cue(spot_cue)
+        eos.cues.record(spot_cue)
         cue_label = ""
         if getattr(cue, f"spot_{spotnum}").character is not None:
             fp = spot_idx + characters.index(getattr(cue, f"spot_{spotnum}").character)
@@ -286,12 +282,12 @@ def write_spot_diff_cuelist(
             )
 
         if cue.cue_time is not None:
-            eos.set_time(spot_cue, cue.cue_time)
+            eos.cues.set_time(spot_cue, cue.cue_time)
 
         if getattr(cue, f"spot_{spotnum}").notes is not None:
             cue_label += " | " + getattr(cue, f"spot_{spotnum}").notes
 
-        eos.label_cue(spot_cue, cue_label)
+        eos.cues.label(spot_cue, cue_label)
 
 
 def main() -> None:
@@ -304,14 +300,14 @@ def main() -> None:
 
     if args.generate:
         generate_blank_cuelist()
-        exit()
+        sys.exit()
 
     all_cues = parse_cuelist(args.excel)
     all_characters = get_all_characters(all_cues)
 
-    eos = EosSLIP("localhost", 3032)
-    eos.live()
-    eos.clear_cmd_line()
+    eos = Eos.tcp_slip("localhost", 3032)
+    eos.keys.live()
+    eos.keys.clear_cmd_line()
 
     generate_character_fps(eos, all_characters)
 

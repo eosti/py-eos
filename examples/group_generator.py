@@ -11,8 +11,9 @@ from rich.logging import RichHandler
 from rich.prompt import Confirm
 from rich.table import Table
 
-from eos import Eos, EosSLIP
-from eos.helpers import EosChanSelection, EosException, GroupProperties
+from eos import Eos
+from eos.helpers import EosChanSelection, EosError
+from eos.properties import GroupProperties
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ def main(argv=None) -> None:
         handlers=[RichHandler()],
     )
 
-    eos = EosSLIP("localhost", 3032)
+    eos = Eos.tcp_slip("localhost", 3032)
 
     vw_export = VWExport(args.file).export_df()
 
@@ -74,11 +75,11 @@ def main(argv=None) -> None:
     for grp in group_list:
         if check_for_existing_group(eos, console, grp):
             continue
-        eos.record_group_overwrite(grp.number, grp.chans, grp.label)
+        eos.groups.record(grp.number, grp.chans, grp.label)
 
 
 def check_for_existing_group(eos: Eos, console: Console, group: GroupProperties) -> bool:
-    """Checks if a group already exists in Eosself.
+    """Checks if a group already exists in Eos.
 
     Returns:
         True if the group already exists and the user does not want to overwrite
@@ -88,8 +89,8 @@ def check_for_existing_group(eos: Eos, console: Console, group: GroupProperties)
 
     """
     try:
-        grp = eos.group.get(group.number)
-    except EosException:
+        grp = eos.groups.get(group.number)
+    except EosError:
         # Group does not exist
         return False
     else:

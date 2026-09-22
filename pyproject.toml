@@ -10,12 +10,15 @@ authors = [{name="Reid Sox-Harris", email="reid@soxharris.com"}]
 license = "MIT"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["python-osc (>=1.9.3,<2.0)", "path (>=17.1.0,<18.0.0)", "strictyaml (>=1.7.3,<2.0.0)"]
+dependencies = ["python-osc (>=1.9.3,<2.0)"]
+urls.repository = "https://github.com/eosti/py-eos"
+
 
 [project.optional-dependencies]
 examples = [
     "odfpy>=1.4.1",
-    "pandas (>=2.3.2,<3.0.0)", "openpyxl (>=3.1.5,<4.0.0)", "lighting-paperwork (>=0.1.6)"]
+    "pandas (>=2.3.2,<3.0.0)", "openpyxl (>=3.1.5,<4.0.0)", "lighting-paperwork (>=0.1.6)",
+    "path (>=17.1.0,<18.0.0)", "strictyaml (>=1.7.3,<2.0.0)"]
 
 [dependency-groups]
 dev = [
@@ -23,6 +26,7 @@ dev = [
   "pytest>=9.0.2",
   "pytest-cov>=7",
   "ruff>=0.15.9",
+  "ty>=0.0.83",
 ]
 
 
@@ -41,11 +45,18 @@ lint.ignore = [
   "INP001",  # __init__ required in folders
   # 'G004',    # Logging statement uses f-string
   #     'PD901',   # Avoid using the generic variable name `df` for DataFrames
-  # 'D100',    # Missing docstring in public module
-  #     'D104',    # Missing docstring in public package
-  #     'D107',    # Missing docstring in `__init__`
-  #     'D400',    # First line should end with a period'
-  #     'D401',    # First line of docstring should be in imperative mood'
+   'D100',    # Missing docstring in public module
+       'D104',    # Missing docstring in public package
+       'D107',    # Missing docstring in `__init__`
+       'D400',    # First line should end with a period'
+       'D401',    # First line of docstring should be in imperative mood'
+       'D101',
+       'D102',
+       'D105',
+       'TD003',
+       'TD004',
+       'TD002',
+       'N802',
 ]
 lint.per-file-ignores."tests/*.py" = [
   "ANN",     # Typechecking

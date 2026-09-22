@@ -1,12 +1,12 @@
 """Collection of helpers for various Eos things."""
 
 import itertools
-from abc import ABC
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from collections.abc import Iterator, Sequence
+from dataclasses import dataclass
 from decimal import Decimal
-from enum import IntEnum
-from typing import Any, Self
+from typing import Any, Self, TypeGuard
+
+from eos.enums import EosWheelCategory
 
 # TODO: how to make changing the attributes in CueProperties actually affect the cue?
 # Then we could get rid of setters entirely, which would be nice
@@ -15,42 +15,47 @@ from typing import Any, Self
 # Use namedtuple for immutable data, like Cue (?) or freeze the dataclass.
 
 
-class EosExceptionError(Exception):
+class EosError(Exception):
     """Generic Eos exception."""
 
 
-class EosTimeoutError(EosExceptionError):
+class EosTimeoutError(EosError):
     """Timeout communicating with Eos."""
 
 
-class EosCmdLineError(EosExceptionError):
+class EosCmdLineError(EosError):
     """Command line error exception."""
+
+
+class EosParsingError(EosError):
+    """Error with parsing received data."""
 
 
 class EosChanSelection:
     """Stores ranges as individual channels."""
 
-    def __init__(self, chans: list[Decimal | str] | set[Decimal | str]) -> None:
+    def __init__(self, chans: Sequence[int | Decimal | str]) -> None:
         """Create a new channel selection from list of individual channels."""
         dec_chans = [Decimal(x) for x in chans]
-        self.chans: set[Decimal] = sorted(set(dec_chans))
+        self.chans: list[Decimal] = sorted(set(dec_chans))
 
     def __repr__(self) -> str:
-        return str(self.chans)
+        str_chans = [str(x) for x in self.chans]
+        return str(str_chans)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Decimal]:
         yield from self.chans
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, EosChanSelection):
             return self.chans == other.chans
         return False
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self.chans)
 
     @classmethod
-    def from_eos_arg(cls, eos_arg: list[Any]):
+    def from_eos_arg(cls, eos_arg: list[Any]) -> Self:
         """Generate a Eos channel selection from an Eos range.
 
         ex. "1-4 7 9 12-24"
@@ -71,7 +76,7 @@ class EosChanSelection:
         return cls(sorted(chan_list))
 
     @classmethod
-    def from_active_chans(cls, active_chans: str):
+    def from_active_chans(cls, active_chans: str) -> Self:
         """Generate an Eos channel selection from the Eos active channels."""
         split_str = active_chans.split(",")
         chan_list = []
@@ -87,10 +92,10 @@ class EosChanSelection:
         """Convert a list of channels to a list of tuples with inclusive ranges."""
         sorted_chans = sorted(set(self.chans))
 
-        def ranges(i):
+        def ranges(i: list) -> Iterator[tuple[Decimal, Decimal]]:
             for _key, group in itertools.groupby(enumerate(i), lambda t: t[1] - t[0]):
-                group = list(group)
-                yield group[0][1], group[-1][1]
+                group_list = list(group)
+                yield group_list[0][1], group_list[-1][1]
 
         return list(ranges(sorted_chans))
 
@@ -114,13 +119,7 @@ class EosChanSelection:
         command = ""
         ranges = self.to_ranges()
         for idx, val in enumerate(ranges):
-            if val[0] == val[1]:
-                # Single value
-                chanstr = str(val[0])
-            else:
-                # Range
-                chanstr = f"{val[0]} Thru {val[1]}"
-
+            chanstr = str(val[0]) if val[0] == val[1] else f"{val[0]} Thru {val[1]}"
             if idx < len(ranges) - 1:
                 # Not the last channel
                 chanstr += " +"
@@ -140,7 +139,7 @@ class EosActiveChannel:
     fixture_version: int
 
     @classmethod
-    def from_args(cls, args: list[Any]):
+    def from_args(cls, args: tuple[Any, ...]) -> Self | None:
         if args[0] == "":
             return None
         chan = EosChanSelection.from_active_chans(args[0].split("[")[0])
@@ -157,16 +156,19 @@ class EosActiveChannel:
             except IndexError:
                 fixture_version = -1
 
-        return cls(chan, intens, fixture_type, fixture_version)
+        return cls(
+            chan=chan, intens=intens, fixture_type=fixture_type, fixture_version=fixture_version
+        )
 
 
 @dataclass
 class Cue:
     cuelist: int
-    cue: Decimal
+    cue: int | Decimal
     part: int = 0
-    duration: int | None = None
-    percentage: float | None = None
+    label: str = ""
+    duration: Decimal | None = None
+    percentage: Decimal | None = None
 
     # Spaces around the / are MANDATORY
     # The :g is needed to print 10, not 10.0
@@ -175,196 +177,50 @@ class Cue:
             return f"{self.cuelist:g} / {self.cue:g}"
         return f"{self.cuelist:g} / {self.cue:g} Part {self.part:g}"
 
-    # TODO: hint return self in 3.11
     @classmethod
-    def empty_cue(cls):
-        return cls(-1, -1, -1, -1)
+    def empty_cue(cls) -> Self:
+        return cls(cuelist=-1, cue=-1, part=-1, duration=None, percentage=None)
 
     @classmethod
-    def fromText(cls, text: str):
+    def from_active_cue(cls, text: str) -> Self:
+        """Parse cue data from OSC active cue status message."""
         fields = text.split(" ")
+        if "/" not in fields[0]:
+            cuelist = 0
+            cue = 0
+        else:
+            cuelist = int(fields[0].split("/")[0])
+            cue = Decimal(fields[0].split("/")[1])
+
+        return cls(
+            cuelist=cuelist,
+            cue=cue,
+            label=" ".join(fields[1:-2]),
+            duration=Decimal(fields[-2]),
+            percentage=Decimal(fields[-1].strip("%")) / Decimal(100),
+        )
+
+    @classmethod
+    def from_nonactive_cue(cls, text: str) -> Self:
+        """Parse cue data from OSC active cue status message."""
+        fields = text.split(" ")
+        duration = Decimal(0) if len(fields) == 1 else Decimal(fields[-1])
         cuelist = int(fields[0].split("/")[0])
         cue = Decimal(fields[0].split("/")[1])
 
-        if len(fields) == 2:
-            return cls(cuelist, cue, fields[1])
-        return cls(cuelist, cue, fields[1], float(fields[-1].strip("%")) / 100.0)
-
-
-@dataclass
-class EosProperties(ABC):
-    number: Decimal
-    # Ignore this field in equality since Eos sometimes doesn't give this value
-    index: int | None = field(compare=False)
-    uid: str
-    label: str
-
-    def __post_init__(self):
-        if self.index == -1:
-            # Eos may "optimize" out the index number to -1 unless you query by index
-            self.index = None
-        if not isinstance(self.number, Decimal):
-            self.number = Decimal(self.number)
-
-
-@dataclass
-class CueProperties(EosProperties):
-    cuelist: int
-    part: int
-
-    # Order matches Eos output
-    uptime: float
-    updelay: float
-    downtime: float
-    downdelay: float
-    focustime: float
-    focusdelay: float
-    colortime: float
-    colordelay: float
-    beamtime: float
-    beamdelay: float
-
-    preheat: bool
-    curve: float
-    rate: int
-
-    markstr: str
-    blockstr: str
-    assertstr: str
-    links: str | float
-
-    followtime: float
-    hangtime: float
-    allfade: bool
-    numloops: int
-    solo: bool
-    timecode: str
-    partcount: int
-    notes: str
-    scene: str
-    scene_end: bool
-    cuepartindex: int
-
-    fx: str | None = None
-    actions: str | None = None
-    links2: str | None = None
+        return cls(cuelist=cuelist, cue=cue, label=" ".join(fields[1:-2]), duration=duration)
 
     @classmethod
-    def from_list(cls, cuelist: int, cue: Decimal, part: int, msg: list[Any]):
-        return cls(
-            cue,
-            msg[0],
-            msg[1],
-            msg[2],
-            cuelist,
-            part,
-            msg[3],
-            msg[4],
-            msg[5],
-            msg[6],
-            msg[7],
-            msg[8],
-            msg[9],
-            msg[10],
-            msg[11],
-            msg[12],
-            msg[13],
-            msg[14],
-            msg[15],
-            msg[16],
-            msg[17],
-            msg[18],
-            msg[19],
-            msg[20],
-            msg[21],
-            msg[22],
-            msg[23],
-            msg[24],
-            msg[25],
-            msg[26],
-            msg[27],
-            msg[28],
-            msg[29],
-            msg[30],
-        )
+    def from_text(cls, text: str, default_cuelist: int = 0) -> Self:
+        """Parse cue data from a passed string like `47` or `4/97`."""
+        if "/" in text:
+            cuelist = int(text.split("/", maxsplit=1)[0])
+            cuenum = Decimal(text.split("/")[1])
+        else:
+            cuelist = default_cuelist
+            cuenum = Decimal(text)
 
-
-@dataclass
-class GroupProperties(EosProperties):
-    chans: EosChanSelection | None = None
-
-    @classmethod
-    def from_list(cls, grp: Decimal, props: list):
-        return cls(grp, props[0], props[1], props[2])
-
-
-@dataclass
-class MacroProperties(EosProperties):
-    mode: str
-    command: list[str] | None = None
-
-    @classmethod
-    def from_list(cls, macro: Decimal, props: list):
-        return cls(macro, props[0], props[1], props[2], props[3])
-
-
-@dataclass
-class RefDataProperties(EosProperties):
-    """Collection of properties for referenced data."""
-
-    absolute: bool
-    locked: bool
-
-    chans: EosChanSelection | None = None
-    bytype: EosChanSelection | None = None
-    fx: str | None = None
-
-    @classmethod
-    def from_list(cls, number: Decimal, props: list[Any]):
-        """Create a RefDataProperties from a list of properties."""
-        return cls(number, *props)
-
-
-@dataclass
-class CueListProperties(EosProperties):
-    """Collection of properties from a cue list."""
-
-    playback_mode: str
-    fader_mode: str
-    independent: bool
-    htp: bool
-    assert_state: bool
-    block: bool
-    background: bool
-    solo_mode: bool
-    timecode_list: int
-    oos_sync: bool
-
-    links: list[int] | None = None
-
-    @classmethod
-    def from_list(cls, number: Decimal, props: list[Any]):
-        """Create a CueListProperties from a list of properties."""
-        return cls(number, *props)
-
-
-class EosState(IntEnum):
-    """Enum mapping Eos state to ints."""
-
-    BLIND = 0
-    LIVE = 1
-
-
-class EosWheelCategory(IntEnum):
-    """Enum mapping Eos wheel categories to ints."""
-
-    UNASSIGNED = 0
-    INTENSITY = 1
-    FOCUS = 2
-    COLOR = 3
-    IMAGE = 4
-    FORM = 5
-    SHUTTER = 6
+        return cls(cuelist=cuelist, cue=cuenum)
 
 
 @dataclass
@@ -378,79 +234,25 @@ class EosWheel:
     category: EosWheelCategory
 
     @classmethod
-    def from_args(cls, num: int, args: list[Any]) -> Self:
+    def from_args(cls, num: int, args: tuple[Any, ...]) -> Self:
         """Create an EosWheel from OSC arguments."""
         name = args[0].split("[")[0].strip()
         pretty_value = int(args[0].split("[")[1].replace("]", ""))
 
-        return cls(num, name, pretty_value, Decimal(args[2]), EosWheelCategory(int(args[1])))
+        return cls(
+            number=num,
+            name=name,
+            pretty_value=pretty_value,
+            value=Decimal(args[2]),
+            category=EosWheelCategory(int(args[1])),
+        )
 
 
-"""
-Valid iterator targets.
-Dict value represents # of OSC messages to get full data
-"""
-EosTargets = {
-    "patch": 0,
-    "cuelist": 0,
-    "cue": 4,
-    "group": 2,
-    "macro": 2,
-    "sub": 0,
-    "preset": 4,
-    "ip": 3,
-    "fp": 3,
-    "cp": 3,
-    "bp": 3,
-    "curve": 0,
-    "fx": 0,
-    "snap": 0,
-    "pixmap": 0,
-    "ms": 0,
-}
+def is_str_sequence(values: tuple) -> TypeGuard[tuple[str, ...]]:
+    """Typing helper to check if all items in a list are strs."""
+    return all(isinstance(val, str) for val in values)
 
 
-class EosTab(IntEnum):
-    """Enum mapping tab names to tab numbers."""
-
-    AUGMENT3D = 38
-    BEAM_PALATTES = 25
-    CHANNELS_TABLE = 1
-    CHANNELS_IN_USE = 32
-    COLOR_PALETTES = 24
-    COLOR_PATHS = 33
-    CUES = 16
-    CURVES = 21
-    CUSTOM_DIRECT_SELECTS = 39
-    EFFECT_CHANNELS = 8
-    EFFECTS = 13
-    ENCODER_MAPS = 40
-    FADER_LIST_DISPLAY = 35
-    FOCUS_PALETTES = 23
-    GROUPS = 17
-    INTENSITY_PALETTES = 22
-    MACROS = 18
-    MAGIC_SHEET = 3
-    MAGIC_SHEET_LIST = 14
-    MANUAL = 100
-    PARK = 20
-    PATCH = 12
-    PIXEL_MAPS = 9
-    PRESETS = 26
-    PSD = 2
-    SACN_OUTPUT_VIEWER = 37
-    SHOW_CONTROL = 11
-    SNAPSHOTS = 19
-    SUBMASTERS = 15
-    ABOUT = 29
-    COLOR_PICKER = 27
-    COMMAND_HISTORY = 30
-    DIRECT_SELECTS = 4
-    EFFECT_STATUS = 6
-    FADER_CONFIG = 36
-    FADERS = 28
-    LAMP_CONTROLS = 31
-    ML_CONTROLS = 5
-    PIXEL_MAP_PREVIEW = 10
-    VIRTUAL_KEYBOARD = 7
-    DIAGNOSTICS = 99
+def is_decimal_sequence(values: tuple) -> TypeGuard[tuple[str | int | float, ...]]:
+    """Typing helper to check if all items in a list are Decimal-able."""
+    return all(isinstance(val, str | int | float) for val in values)

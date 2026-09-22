@@ -10,7 +10,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-from eos import EosSLIP
+from eos import Eos
 
 # Alternate idea: put character in FP, then poll channel for spot info
 logger = logging.getLogger(__name__)
@@ -35,13 +35,13 @@ def main() -> None:
     """Run main program logic."""
     logging.basicConfig(level=logging.INFO)
 
-    eos = EosSLIP("localhost", 3032)
+    eos = Eos.tcp_slip("localhost", 3032)
 
-    cue_index = eos.get_cue_idx(1)
+    cue_index = eos.cues.count(1)
     fs_cues = []
 
     for i in range(cue_index):
-        cue = eos.get_cue_by_idx(1, i)
+        cue = eos.cues.get_by_idx(i, cuelist=1)
         notes = ""
         if "FS" in cue.label:
             if "Up" in cue.label:
@@ -64,7 +64,7 @@ def main() -> None:
                 if len(cue.label.split(" ")) > 1:
                     notes = cue.label.split(" ", 1)[1]
 
-            fs_cues.append(FollowspotCue(cue.cue, action, cue.uptime / 1000, character, notes))
+            fs_cues.append(FollowspotCue(cue.number, action, cue.uptime, character, notes))
 
     logger.info("%s cues collected", len(fs_cues))
 
