@@ -56,7 +56,6 @@ lint.ignore = [
        'TD003',
        'TD004',
        'TD002',
-       'N802',
 ]
 lint.per-file-ignores."tests/*.py" = [
   "ANN",     # Typechecking
@@ -71,11 +70,6 @@ lint.per-file-ignores."tests/*.py" = [
   "S101",    # Use of `assert` detected
   "SLF001",  # Private member accessed
 ]
-
-lint.pep8-naming.extend-ignore-names = ["_update*", "_unhandled*", "_reset*"]
-
-[tool.pylint]
-main.ignore = [ ".venv" ]
 
 [tool.codespell]
 skip = "*.xml"

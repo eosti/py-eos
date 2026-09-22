@@ -5,7 +5,6 @@ import sys
 from typing import Any, Self
 
 from eos.cues import EosCues
-from eos.enums import EosTargets
 from eos.groups import EosGroups
 from eos.helpers import EosCmdLineError, EosError
 from eos.iterator import (
@@ -48,7 +47,7 @@ class Eos:
         self.fp = EosRefDataIterator(self, "fp")
         self.cp = EosRefDataIterator(self, "cp")
 
-        self.osc.dispatcher.set_default_handler(self._unhandledMessageHandler)
+        self.osc.dispatcher.set_default_handler(self._unhandled_message_handler)
         try:
             logger.info("Connected to Eos v%s", self.system.get_version())
         except EosError as e:
@@ -84,38 +83,6 @@ class Eos:
         osc = UdpOscConnection(ip=ip, rx_port=rx_port, tx_port=tx_port)
         return cls(osc)
 
-    def _unhandledMessageHandler(self, addr: str, *args: list[Any]) -> None:
+    def _unhandled_message_handler(self, addr: str, *args: list[Any]) -> None:
         """Hande messages that are not otherwise handled."""
         logger.debug("Unhandled message: %s, %s", addr, args)
-
-    def get_target_count(self, target: str, **kwargs: int) -> int:
-        """Get the number of targets of a particular type."""
-        if target not in EosTargets:
-            raise ValueError("Invalid target %s", target)
-
-        if target == "cue":
-            if "cuelist" not in kwargs:
-                logger.warning("Cuelist not specified for target count; defaulting to 1")
-            query_str = f"get/cue/{kwargs.get('cuelist', 1)}/count"
-        else:
-            query_str = f"get/{target}/count"
-
-        target_count: int | None = None
-
-        def handler(_: str, *args: list[Any]) -> None:
-            nonlocal target_count
-            if isinstance(args[0], int):
-                target_count = args[0]
-            else:
-                logger.warning("Uncertain target count conversion %s", args[0])
-                target_count = int(args[0])
-
-        osc_filter = self.osc.dispatcher.map(f"/eos/out/{query_str}", handler)
-        self.osc.write(f"/eos/{query_str}")
-        self.osc.handle_messages()
-
-        if target_count is None:
-            raise EosError(f"Unable to get number of targets for {target}")
-
-        self.osc.dispatcher.unmap(f"/eos/out/{query_str}", osc_filter)
-        return target_count

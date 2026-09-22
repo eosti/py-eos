@@ -46,22 +46,22 @@ class EosSystem:
         self.cmd_line: str
         self.cmd_line_error: bool
 
-        self.eos.osc.dispatcher.map("/eos/out/user", self._updateUserHandler)
-        self.eos.osc.dispatcher.map("/eos/out/show/name", self._updateShowNameHandler)
-        self.eos.osc.dispatcher.map("/eos/out/state", self._updateStateHandler)
-        self.eos.osc.dispatcher.map("/eos/out/event/state", self._updateStateHandler)
-        self.eos.osc.dispatcher.map("/eos/out/locked", self._updateLockedHandler)
-        self.eos.osc.dispatcher.map("/eos/out/event/locked", self._updateLockedHandler)
-        self.eos.osc.dispatcher.map("/eos/out/cmd", self._updateCmdHandler)
-        self.eos.osc.dispatcher.map("/eos/out/user/*", self._updateUserCmdHandler)
-        self.eos.osc.dispatcher.map("/eos/out/softkey/*", self._updateSoftKeyHandler)
-        self.eos.osc.dispatcher.map("/eos/out/active/chan", self._updateActiveChanHandler)
-        self.eos.osc.dispatcher.map("/eos/out/active/wheel/*", self._updateWheelHandler)
-        self.eos.osc.dispatcher.map("/eos/out/wheel", self._resetWheelHandler)
-        self.eos.osc.dispatcher.map("/eos/out/switch", self._resetSwitchHandler)
-        self.eos.osc.dispatcher.map("/eos/out/color/hs", self._updateHSColorHandler)
-        self.eos.osc.dispatcher.map("/eos/out/pantilt", self._updatePanTiltHandler)
-        self.eos.osc.dispatcher.map("/eos/out/xyz", self._updateXYZHandler)
+        self.eos.osc.dispatcher.map("/eos/out/user", self._update_user_handler)
+        self.eos.osc.dispatcher.map("/eos/out/show/name", self._update_show_name_handler)
+        self.eos.osc.dispatcher.map("/eos/out/state", self._update_state_handler)
+        self.eos.osc.dispatcher.map("/eos/out/event/state", self._update_state_handler)
+        self.eos.osc.dispatcher.map("/eos/out/locked", self._update_locked_handler)
+        self.eos.osc.dispatcher.map("/eos/out/event/locked", self._update_locked_handler)
+        self.eos.osc.dispatcher.map("/eos/out/cmd", self._update_cmd_handler)
+        self.eos.osc.dispatcher.map("/eos/out/user/*", self._update_user_cmd_handler)
+        self.eos.osc.dispatcher.map("/eos/out/softkey/*", self._update_softkey_handler)
+        self.eos.osc.dispatcher.map("/eos/out/active/chan", self._update_active_chan_handler)
+        self.eos.osc.dispatcher.map("/eos/out/active/wheel/*", self._update_wheel_handler)
+        self.eos.osc.dispatcher.map("/eos/out/wheel", self._reset_wheel_handler)
+        self.eos.osc.dispatcher.map("/eos/out/switch", self._reset_switch_handler)
+        self.eos.osc.dispatcher.map("/eos/out/color/hs", self._update_hs_color_handler)
+        self.eos.osc.dispatcher.map("/eos/out/pantilt", self._update_pan_tilt_handler)
+        self.eos.osc.dispatcher.map("/eos/out/xyz", self._update_xyz_handler)
 
     def ping(self, message: str = "") -> None:
         """Pings Eos to check for liveness.
@@ -104,29 +104,29 @@ class EosSystem:
         version = resp[0].args[0]
         return str(version)
 
-    def _updateUserHandler(self, _addr: str, *args: ArgValue) -> None:
+    def _update_user_handler(self, _addr: str, *args: ArgValue) -> None:
         if not is_decimal_sequence(args):
             raise TypeError("Unexpected types in OSC argument")
         self.user_id = int(args[0])
         logger.debug("User ID: %i", self.user_id)
 
-    def _updateShowNameHandler(self, _addr: str, *args: ArgValue) -> None:
+    def _update_show_name_handler(self, _addr: str, *args: ArgValue) -> None:
         if not is_str_sequence(args):
             raise TypeError("Unexpected types in OSC argument")
         self.show_name = args[0]
         logger.debug("Show name: %s", self.show_name)
 
-    def _updateStateHandler(self, _addr: str, *args: ArgValue) -> None:
+    def _update_state_handler(self, _addr: str, *args: ArgValue) -> None:
         if not is_decimal_sequence(args):
             raise TypeError("Unexpected types in OSC argument")
         self.eos_state = EosState(int(args[0]))
         logger.debug("Eos state: %s", self.eos_state)
 
-    def _updateLockedHandler(self, _addr: str, *args: ArgValue) -> None:
+    def _update_locked_handler(self, _addr: str, *args: ArgValue) -> None:
         self.is_locked = bool(args[0])
         logger.debug("Is locked: %s", self.is_locked)
 
-    def _updateSoftKeyHandler(self, addr: str, *args: ArgValue) -> None:
+    def _update_softkey_handler(self, addr: str, *args: ArgValue) -> None:
         sk_num = int(addr.rsplit("/", 1)[1])
 
         if not is_str_sequence(args):
@@ -137,7 +137,7 @@ class EosSystem:
         else:
             self.softkeys[sk_num - 1] = args[0]
 
-    def _updateActiveChanHandler(self, _addr: str, *args: ArgValue) -> None:
+    def _update_active_chan_handler(self, _addr: str, *args: ArgValue) -> None:
         self.active_chan = EosActiveChannel.from_args(args)
 
         if self.active_chan is not None:
@@ -152,18 +152,18 @@ class EosSystem:
         # When active chan is updated, wheels will reset
         self.wheels.clear()
 
-    def _updateWheelHandler(self, addr: str, *args: ArgValue) -> None:
+    def _update_wheel_handler(self, addr: str, *args: ArgValue) -> None:
         wheel_no = int(addr.rsplit("/", maxsplit=1)[-1])
         self.wheels.update({wheel_no: EosWheel.from_args(wheel_no, args)})
 
-    def _resetWheelHandler(self, addr: str, *args: ArgValue) -> None:
+    def _reset_wheel_handler(self, addr: str, *args: ArgValue) -> None:
         if args[0] != 0:
             logger.warning("Non-zero empty wheel value... Something is afoot!")
             logger.warning("%s %s", addr, args[0])
         else:
             self.wheels.clear()
 
-    def _resetSwitchHandler(self, addr: str, *args: ArgValue) -> None:
+    def _reset_switch_handler(self, addr: str, *args: ArgValue) -> None:
         if args[0] != 0:
             logger.warning("Non-zero empty switch value... Something is afoot!")
             logger.warning("%s %s", addr, args[0])
@@ -171,7 +171,7 @@ class EosSystem:
             # Switches not implemented yet
             pass
 
-    def _updateCmdHandler(self, _addr: str, *args: ArgValue) -> None:
+    def _update_cmd_handler(self, _addr: str, *args: ArgValue) -> None:
         if not is_str_sequence(args):
             raise TypeError("Unexpected types in OSC argument")
 
@@ -185,7 +185,7 @@ class EosSystem:
         else:
             logger.debug("%s: %s", self.display_mode, self.cmd_line)
 
-    def _updateUserCmdHandler(self, addr: str, *args: ArgValue) -> None:
+    def _update_user_cmd_handler(self, addr: str, *args: ArgValue) -> None:
         if not is_str_sequence(args):
             raise TypeError("Unexpected types in OSC argument")
 
@@ -206,7 +206,7 @@ class EosSystem:
             self.user_cmd_line[user_number][1],
         )
 
-    def _updateHSColorHandler(self, _addr: str, *args: ArgValue) -> None:
+    def _update_hs_color_handler(self, _addr: str, *args: ArgValue) -> None:
         if len(args) == 0:
             self.hs = None
         else:
@@ -215,7 +215,7 @@ class EosSystem:
             self.hs = (Decimal(args[0]), Decimal(args[1]))
             logger.debug("Hue/Sat: %f, %f", self.hs[0], self.hs[1])
 
-    def _updatePanTiltHandler(self, _addr: str, *args: ArgValue) -> None:
+    def _update_pan_tilt_handler(self, _addr: str, *args: ArgValue) -> None:
         if len(args) == 0:
             self.pantilt = None
         else:
@@ -224,7 +224,7 @@ class EosSystem:
             self.pantilt = (Decimal(args[0]), Decimal(args[1]))
             logger.debug("Pan/Tilt: %f, %f", self.pantilt[0], self.pantilt[1])
 
-    def _updateXYZHandler(self, _addr: str, *args: ArgValue) -> None:
+    def _update_xyz_handler(self, _addr: str, *args: ArgValue) -> None:
         if len(args) == 0:
             self.xyz = None
         else:

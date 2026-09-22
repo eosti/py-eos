@@ -22,15 +22,14 @@ class EosCues(EosCueIterator):
         self.previous_cue: Cue | None = None
         self.active_cue: Cue | None = None
         self.pending_cue: Cue | None = None
-        self.iterator = EosCueIterator(self.eos)
         self._send_command = self.eos.send_command
 
-        self.eos.osc.dispatcher.map("/eos/out/previous/cue*", self._updatePreviousCueHandler)
-        self.eos.osc.dispatcher.map("/eos/out/active/cue*", self._updateActiveCueHandler)
-        self.eos.osc.dispatcher.map("/eos/out/pending/cue*", self._updatePendingCueHandler)
+        self.eos.osc.dispatcher.map("/eos/out/previous/cue*", self._update_previous_cue_handler)
+        self.eos.osc.dispatcher.map("/eos/out/active/cue*", self._update_active_cue_handler)
+        self.eos.osc.dispatcher.map("/eos/out/pending/cue*", self._update_pending_cue_handler)
         super().__init__(eos)
 
-    def _updatePreviousCueHandler(self, addr: str, *args: list[Any]) -> None:
+    def _update_previous_cue_handler(self, addr: str, *args: list[Any]) -> None:
         """Handle previous cue updates."""
         if len(args) == 0 or args[0] == "":
             self.previous_cue = None
@@ -41,7 +40,7 @@ class EosCues(EosCueIterator):
             # Redundant info, skip it
             pass
 
-    def _updateActiveCueHandler(self, addr: str, *args: list[Any]) -> None:
+    def _update_active_cue_handler(self, addr: str, *args: list[Any]) -> None:
         """Handle active cue updates."""
         if len(args) == 0 or args[0] == "":
             self.active_cue = None
@@ -52,7 +51,7 @@ class EosCues(EosCueIterator):
             # Redundant info, skip it
             pass
 
-    def _updatePendingCueHandler(self, addr: str, *args: list[Any]) -> None:
+    def _update_pending_cue_handler(self, addr: str, *args: list[Any]) -> None:
         """Handle pending cue updates."""
         if len(args) == 0 or args[0] == "":
             self.pending_cue = None

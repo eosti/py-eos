@@ -69,17 +69,17 @@ class EosIterator[T](ABC):
     def get(self, num: int | Decimal) -> T:
         """Get a target from the Eos number."""
         query_str = f"get/{self.target}/{num}"
-        return self._getQuery(query_str)
+        return self._get_query(query_str)
 
     def get_by_idx(self, idx: int) -> T:
         """Get a target from its index number."""
         query_str = f"get/{self.target}/index/{idx}"
-        return self._getQuery(query_str)
+        return self._get_query(query_str)
 
     def get_by_uid(self, uid: str) -> T:
         """Get a target from its UID."""
         query_str = f"get/{self.target}/uid/{uid}"
-        return self._getQuery(query_str)
+        return self._get_query(query_str)
 
     def label(self, num: Decimal | int, label: str) -> None:
         """Label a target.
@@ -95,7 +95,7 @@ class EosIterator[T](ABC):
     def _handle_response(self, resp: list[OscResponse]) -> T:
         """Handle the results of a query function."""
 
-    def _getQuery(self, query_str: str) -> T:
+    def _get_query(self, query_str: str) -> T:
         """Query Eos for a data and handle the multi-line result."""
         resp = Transaction(
             osc_conn=self.eos.osc,
@@ -107,14 +107,14 @@ class EosIterator[T](ABC):
 
         return self._handle_response(resp)
 
-    def _genericChanParser(self, resp: OscResponse) -> EosChanSelection:
+    def _generic_chan_parser(self, resp: OscResponse) -> EosChanSelection:
         """Generic parser for arguments that contain a list of channels."""
         if len(resp.args) <= 2:
             return EosChanSelection(chans=[])
 
         return EosChanSelection.from_eos_arg(resp.args[2:])
 
-    def _genericLinksParser(self, resp: OscResponse) -> list[str] | None:
+    def _generic_links_parser(self, resp: OscResponse) -> list[str] | None:
         """Generic parser for arguments that contain a list of links."""
         if len(resp.args) <= 2:
             return None
@@ -147,14 +147,14 @@ class EosRefDataIterator(EosIterator[RefDataProperties]):
 
         for r in resp:
             if "channel" in r.addr:
-                chans = self._genericChanParser(r)
+                chans = self._generic_chan_parser(r)
             elif "byType" in r.addr:
-                bytype = self._genericChanParser(r)
+                bytype = self._generic_chan_parser(r)
             elif "fx" in r.addr:
                 # Presets only
-                fx = self._refDataFXParser(r)
+                fx = self._refdata_fx_parser(r)
             else:
-                refdata = self._refDataInfoParser(r)
+                refdata = self._refdata_info_parser(r)
 
         if refdata is None or chans is None or fx is None:
             raise EosError(f"Not all data present for {self.target}")
@@ -164,7 +164,7 @@ class EosRefDataIterator(EosIterator[RefDataProperties]):
         refdata.fx = None
         return refdata
 
-    def _refDataInfoParser(self, resp: OscResponse) -> RefDataProperties:
+    def _refdata_info_parser(self, resp: OscResponse) -> RefDataProperties:
         """Parses the info (first packet) for referenced data."""
         if len(resp.args) <= 2:
             logger.debug(resp.args)
@@ -177,7 +177,7 @@ class EosRefDataIterator(EosIterator[RefDataProperties]):
             logger.exception(resp.args)
             raise EosError(f"Referenced data {self.target} {number} does not exist!") from None
 
-    def _refDataFXParser(self, resp: OscResponse) -> list | None:
+    def _refdata_fx_parser(self, resp: OscResponse) -> list | None:
         if len(resp.args) <= 2:
             return None
 
@@ -196,9 +196,9 @@ class EosGroupIterator(EosIterator[GroupProperties]):
 
         for r in resp:
             if "channels" in r.addr:
-                chans = self._genericChanParser(r)
+                chans = self._generic_chan_parser(r)
             else:
-                group = self._groupInfoParser(r)
+                group = self._group_info_parser(r)
 
         if group is None or chans is None:
             raise EosError(f"Not all data present for {self.target}")
@@ -206,7 +206,7 @@ class EosGroupIterator(EosIterator[GroupProperties]):
         group.chans = chans
         return group
 
-    def _groupInfoParser(self, resp: OscResponse) -> GroupProperties:
+    def _group_info_parser(self, resp: OscResponse) -> GroupProperties:
         """Parses the info (first packet) for groups."""
         if len(resp.args) <= 2:
             logger.debug(resp.args)
@@ -232,9 +232,9 @@ class EosMacroIterator(EosIterator[MacroProperties]):
 
         for r in resp:
             if "text" in r.addr:
-                command = self._macroTextParser(r)
+                command = self._macro_text_parser(r)
             else:
-                macro = self._macroInfoParser(r)
+                macro = self._macro_info_parser(r)
 
         if macro is None or command is None:
             raise EosError(f"Not all data present for {self.target}")
@@ -242,7 +242,7 @@ class EosMacroIterator(EosIterator[MacroProperties]):
         macro.command = [command]
         return macro
 
-    def _macroTextParser(self, resp: OscResponse) -> str:
+    def _macro_text_parser(self, resp: OscResponse) -> str:
         """Parses a text argument for macros."""
         if len(resp.args) <= 2:
             logger.debug(resp.args)
@@ -250,7 +250,7 @@ class EosMacroIterator(EosIterator[MacroProperties]):
 
         return "".join(resp.args[2:])
 
-    def _macroInfoParser(self, resp: OscResponse) -> MacroProperties:
+    def _macro_info_parser(self, resp: OscResponse) -> MacroProperties:
         """Parses the info (first packet) for macros."""
         if len(resp.args) <= 2:
             logger.debug(resp.args)
@@ -276,9 +276,9 @@ class EosCueListIterator(EosIterator[CueListProperties]):
 
         for r in resp:
             if "links" in r.addr:
-                links = self._genericLinksParser(r)
+                links = self._generic_links_parser(r)
             else:
-                cuelist = self._cueListInfoParser(r)
+                cuelist = self._cuelist_info_parser(r)
 
         if cuelist is None or links is None:
             raise EosError(f"Not all data present for {self.target}")
@@ -286,7 +286,7 @@ class EosCueListIterator(EosIterator[CueListProperties]):
         cuelist.links = None
         return cuelist
 
-    def _cueListInfoParser(self, resp: OscResponse) -> CueListProperties:
+    def _cuelist_info_parser(self, resp: OscResponse) -> CueListProperties:
         """Parses the info (first packet) for cue lists."""
         if len(resp.args) <= 2:
             logger.debug(resp.args)
@@ -323,7 +323,7 @@ class EosCueIterator:
     def __call__(self, cuelist: int) -> None:
         self.cuelist = cuelist
 
-    def _getQuery(self, query_str: str) -> CueProperties:
+    def _get_query(self, query_str: str) -> CueProperties:
         """Query Eos for a data and handle the multi-line result."""
         resp = Transaction(
             osc_conn=self.eos.osc,
@@ -371,12 +371,12 @@ class EosCueIterator:
     def get_cue(self, cue: Cue) -> CueProperties:
         """Get a cue with explicit cue list/cue number/part number."""
         query_str = f"get/cue/{cue.cuelist}/{cue.cue:g}/{cue.part}"
-        return self._getQuery(query_str)
+        return self._get_query(query_str)
 
     def get_by_uid(self, uid: str) -> CueProperties:
         """Get a target from its UID."""
         query_str = f"get/cue/uid/{uid}"
-        return self._getQuery(query_str)
+        return self._get_query(query_str)
 
     def get_by_idx(self, idx: int, cuelist: int | None = None) -> CueProperties:
         """Get a cue from a cuelist by index."""
@@ -388,7 +388,7 @@ class EosCueIterator:
         else:
             query_str = f"get/cue/{cuelist}/index/{idx}"
 
-        return self._getQuery(query_str)
+        return self._get_query(query_str)
 
     def _handle_response(self, resp: list[OscResponse]) -> CueProperties:
         cue: CueProperties | None = None
@@ -398,14 +398,14 @@ class EosCueIterator:
 
         for r in resp:
             if "fx" in r.addr:
-                fx = self._cueFXParser(r)
+                fx = self._cue_fx_parser(r)
             elif "links" in r.addr:
-                links = self._cueLinksParser(r)
+                links = self._cue_links_parser(r)
             elif "actions" in r.addr:
-                actions = self._cueActionsParser(r)
+                actions = self._cue_actions_parser(r)
             else:
                 # Assume this one comes in first
-                cue = self._cueInfoParser(r)
+                cue = self._cue_info_parser(r)
 
         if cue is None:
             raise EosParsingError("Not all data present for cue")
@@ -415,7 +415,7 @@ class EosCueIterator:
         cue.actions = actions
         return cue
 
-    def _cueInfoParser(self, resp: OscResponse) -> CueProperties:
+    def _cue_info_parser(self, resp: OscResponse) -> CueProperties:
         """Parse the info (first packet) for cues."""
         cuelist = int(resp.addr.split("/")[5])
         cue = Decimal(resp.addr.split("/")[6])
@@ -427,7 +427,7 @@ class EosCueIterator:
             logger.exception(resp.args)
             raise EosError(f"Cue {cuelist}/{cue} Part {cuepart} does not exist!") from e
 
-    def _cueFXParser(self, resp: OscResponse) -> list[str] | None:
+    def _cue_fx_parser(self, resp: OscResponse) -> list[str] | None:
         """Parse the FX present in a cue."""
         if len(resp.args) <= 2:
             # No links
@@ -435,7 +435,7 @@ class EosCueIterator:
 
         return resp.args[2:]
 
-    def _cueLinksParser(self, resp: OscResponse) -> list[str] | None:
+    def _cue_links_parser(self, resp: OscResponse) -> list[str] | None:
         """Parse the links present in a cue."""
         if len(resp.args) <= 2:
             # No links
@@ -443,7 +443,7 @@ class EosCueIterator:
 
         return resp.args[2:]
 
-    def _cueActionsParser(self, resp: OscResponse) -> list[str] | None:
+    def _cue_actions_parser(self, resp: OscResponse) -> list[str] | None:
         """Parse the actions present in a cue."""
         if len(resp.args) <= 2:
             # No links

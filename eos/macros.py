@@ -15,14 +15,13 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class EosMacros:
+class EosMacros(EosMacroIterator):
     """Mixin for macro-related actions."""
 
     def __init__(self, eos: "Eos") -> None:
         self.eos = eos
-        self.iterator = EosMacroIterator(eos)
 
-        super().__init__()
+        super().__init__(eos)
 
     def record_macro(self, macro: Decimal, commands: list[str]) -> None:
         """Record a macro with a given command sequence."""
