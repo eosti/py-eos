@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import override
 
 from pythonosc.dispatcher import Dispatcher
-from pythonosc.osc_tcp_server import MODE_1_1
+from pythonosc.osc_tcp_server import MODE_1_1, MODE_1_0
 from pythonosc.tcp_client import SimpleTCPClient
 from pythonosc.udp_client import SimpleUDPClient
 
@@ -111,7 +111,7 @@ class PacketLengthTcpOscConnection(TcpOscConnection):
 
     def __init__(self, ip: str, port: int) -> None:
         """Connect to an Eos session over TCP v1.0."""
-        self.client = SimpleTCPClient(ip, port)
+        self.client = SimpleTCPClient(ip, port, mode=MODE_1_0)
         logger.info("Connected to %s:%s (TCP v1.0 Packet Length)", ip, port)
 
         super().__init__(ip, port)
