@@ -63,7 +63,7 @@ class EosSystem:
         self.eos.osc.dispatcher.map("/eos/out/pantilt", self._update_pan_tilt_handler)
         self.eos.osc.dispatcher.map("/eos/out/xyz", self._update_xyz_handler)
 
-    def ping(self, message: str = "") -> None:
+    def ping(self, message: str = "", timeout: int | float = 0.2) -> None:
         """Pings Eos to check for liveness.
 
         Raises:
@@ -77,7 +77,7 @@ class EosSystem:
                 query_data=[message],
                 resp_filter="/eos/out/ping",
                 num_resps=1,
-            ).query()
+            ).query(timeout=timeout)
         except EosTimeoutError as e:
             raise EosError("No ping response received") from e
 
@@ -97,7 +97,7 @@ class EosSystem:
                 query_data=None,
                 resp_filter="/eos/out/get/version",
                 num_resps=1,
-            ).query()
+            ).query(timeout=1)
         except EosTimeoutError as e:
             raise EosError("No version data received") from e
 
@@ -130,6 +130,7 @@ class EosSystem:
         sk_num = int(addr.rsplit("/", 1)[1])
 
         if not is_str_sequence(args):
+            logger.warning(args)
             raise TypeError("Unexpected types in OSC argument")
         # zero-index the python array
         if args[0] == "":
@@ -172,7 +173,8 @@ class EosSystem:
             pass
 
     def _update_cmd_handler(self, _addr: str, *args: ArgValue) -> None:
-        if not is_str_sequence(args):
+        if not is_str_sequence(args[:-1]):
+            logger.warning(args)
             raise TypeError("Unexpected types in OSC argument")
 
         combined_cmd = "".join(args[:-1])
@@ -186,8 +188,9 @@ class EosSystem:
             logger.debug("%s: %s", self.display_mode, self.cmd_line)
 
     def _update_user_cmd_handler(self, addr: str, *args: ArgValue) -> None:
-        if not is_str_sequence(args):
-            raise TypeError("Unexpected types in OSC argument")
+        if not is_str_sequence(args[:-1]):
+            logger.warning(args)
+           #  raise TypeError("Unexpected types in OSC argument")
 
         user_number = int(addr.split("/")[-2])
         combined_cmd = "".join(args[:-1])
@@ -211,6 +214,7 @@ class EosSystem:
             self.hs = None
         else:
             if not is_decimal_sequence(args):
+                logger.warning(args)
                 raise TypeError("Unexpected types in OSC argument")
             self.hs = (Decimal(args[0]), Decimal(args[1]))
             logger.debug("Hue/Sat: %f, %f", self.hs[0], self.hs[1])
@@ -220,6 +224,7 @@ class EosSystem:
             self.pantilt = None
         else:
             if not is_decimal_sequence(args):
+                logger.warning(args)
                 raise TypeError("Unexpected types in OSC argument")
             self.pantilt = (Decimal(args[0]), Decimal(args[1]))
             logger.debug("Pan/Tilt: %f, %f", self.pantilt[0], self.pantilt[1])
@@ -229,6 +234,7 @@ class EosSystem:
             self.xyz = None
         else:
             if not is_decimal_sequence(args):
+                logger.warning(args)
                 raise TypeError("Unexpected types in OSC argument")
 
             self.xyz = (Decimal(args[0]), Decimal(args[1]), Decimal(args[2]))

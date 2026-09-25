@@ -25,10 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class Eos:
-    """Generic Eos class.
-
-    EosBase is the parent of all mixins, so it is implicity inherited here.
-    """
+    """Generic Eos class."""
 
     GENERIC_DELAY = 0.02
 
@@ -49,9 +46,10 @@ class Eos:
 
         self.osc.dispatcher.set_default_handler(self._unhandled_message_handler)
         try:
-            logger.info("Connected to Eos v%s", self.system.get_version())
+            self.system.ping(timeout=1)
         except EosError as e:
             raise RuntimeError("Unable to connect to Eos") from e
+        logger.info("Connected to Eos v%s", self.system.get_version())
         self.osc.write(f"/eos/sc/Connected from {sys.argv[0]}")
 
     def send_command(self, commandline: str) -> None:
